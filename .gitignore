@@ -32,5 +32,5 @@ Thumbs.db
 *~
 
 # CRITICAL: Protect credentials
-.credentials/
+credential/
 *.credentials
