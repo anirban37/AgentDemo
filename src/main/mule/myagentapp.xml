@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" 
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd 
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+		http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd 
+		http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<!-- HTTP Listener Configuration -->
+	<http:listener-config name="myagentapp-httpListenerConfig" basePath="${http.basePath}" doc:name="HTTP Listener config" doc:id="http-listener-config-001">
+		<http:listener-connection host="${http.host}" port="${http.port}" />
+	</http:listener-config>
+
+	<!-- APIKit Configuration -->
+	<apikit:config name="myagentapp-config" api="api/myagentapp.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" doc:name="Router" doc:id="apikit-config-001" />
+
+	<!-- HTTP Request Configuration for External API -->
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="http-request-config-001">
+		<http:request-connection host="${external.api.host}" port="${external.api.port}" protocol="${external.api.protocol}" />
+	</http:request-config>
+
+	<!-- Main API Flow -->
+	<flow name="myagentapp-main" doc:id="myagentapp-main-flow">
+		<http:listener config-ref="myagentapp-httpListenerConfig" path="/v1/*" doc:name="Listener" doc:id="http-listener-001" />
+		<apikit:router config-ref="myagentapp-config" doc:name="APIkit Router" doc:id="apikit-router-001" />
+		<error-handler ref="global-error-handler" />
+	</flow>
+
+	<!-- API Console Flow -->
+	<flow name="myagentapp-console" doc:id="myagentapp-console-flow">
+		<http:listener config-ref="myagentapp-httpListenerConfig" path="/console/*" doc:name="Listener" doc:id="http-listener-console-001" />
+		<apikit:console config-ref="myagentapp-config" doc:name="APIkit Console" doc:id="apikit-console-001" />
+		<error-handler ref="global-error-handler" />
+	</flow>
+
+	<!-- GET /objects Implementation -->
+	<flow name="get:\objects:myagentapp-config" doc:id="get-objects-flow">
+		<logger level="INFO" doc:name="Log Request Start" doc:id="logger-get-start-001" message="GET /objects request started - CorrelationId: #[correlationId]" />
+		
+		<http:request method="GET" doc:name="Get Objects from External API" doc:id="http-request-get-objects-001" config-ref="HTTP_Request_configuration" path="${external.api.basePath}">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json",
+	"X-Correlation-ID": correlationId
+}]]]></http:headers>
+		</http:request>
+		
+		<ee:transform doc:name="Transform Response" doc:id="transform-get-response-001">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<logger level="INFO" doc:name="Log Request Complete" doc:id="logger-get-complete-001" message="GET /objects request completed successfully - CorrelationId: #[correlationId]" />
+		
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="on-error-propagate-get-001" type="ANY">
+				<ee:transform doc:name="Transform Error 500" doc:id="transform-error-500-get-001">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "error": "Internal server error occurred"
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+
+	<!-- POST /objects Implementation -->
+	<flow name="post:\objects:application\json:myagentapp-config" doc:id="post-objects-flow">
+		<logger level="INFO" doc:name="Log Request Start" doc:id="logger-post-start-001" message="POST /objects request started - CorrelationId: #[correlationId]" />
+		
+		<ee:transform doc:name="Validate and Transform Request" doc:id="transform-post-request-001">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  name: payload.name,
+  data: payload.data default {}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<http:request method="POST" doc:name="Create Object in External API" doc:id="http-request-post-objects-001" config-ref="HTTP_Request_configuration" path="${external.api.basePath}">
+			<http:body><![CDATA[#[payload]]]></http:body>
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/json",
+	"X-Correlation-ID": correlationId
+}]]]></http:headers>
+		</http:request>
+		
+		<ee:transform doc:name="Transform Response" doc:id="transform-post-response-001">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+		<logger level="INFO" doc:name="Log Request Complete" doc:id="logger-post-complete-001" message="POST /objects request completed successfully - CorrelationId: #[correlationId]" />
+		
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="on-error-propagate-post-001" type="ANY">
+				<ee:transform doc:name="Transform Error 500" doc:id="transform-error-500-post-001">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  "error": "Failed to create object due to server error"
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+
+</mule>

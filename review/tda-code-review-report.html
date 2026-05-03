@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MuleSoft Code Review Report</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .metadata {
+            background: #f8f9fa;
+            padding: 25px 40px;
+            border-bottom: 2px solid #e9ecef;
+        }
+        
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .metadata-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .metadata-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .metadata-label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            letter-spacing: 0.5px;
+        }
+        
+        .metadata-value {
+            font-size: 1.1rem;
+            color: #495057;
+            font-weight: 500;
+        }
+        
+        .summary {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(240, 244, 248, 0.85) 100%);
+            padding: 30px 40px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .summary h2 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            border-top: 4px solid #3498db;
+            transition: all 0.3s ease;
+            animation: fadeInUp 0.6s ease-out;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        
+        .stat-card.critical { 
+            border-top-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+        }
+        .stat-card.high { 
+            border-top-color: #e67e22;
+            background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
+        }
+        .stat-card.medium { 
+            border-top-color: #f39c12;
+            background: linear-gradient(135deg, #fffbf0 0%, #ffffff 100%);
+        }
+        .stat-card.low { 
+            border-top-color: #3498db;
+            background: linear-gradient(135deg, #f0f8ff 0%, #ffffff 100%);
+        }
+        .stat-card.info { 
+            border-top-color: #95a5a6;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        }
+        .stat-card.pass { 
+            border-top-color: #27ae60;
+            background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);
+        }
+        
+        .stat-number {
+            font-size: 2.8rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-card.critical .stat-number { 
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card.high .stat-number { 
+            background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card.medium .stat-number { 
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat-card.pass .stat-number { 
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 50px;
+        }
+        
+        .section-title {
+            color: #2c3e50;
+            font-size: 2rem;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+            position: relative;
+        }
+        
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 0;
+            width: 80px;
+            height: 3px;
+            background: #764ba2;
+        }
+        
+        .subsection-title {
+            color: #34495e;
+            font-size: 1.5rem;
+            margin: 30px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #95a5a6;
+        }
+        
+        .category-title {
+            color: #2c3e50;
+            font-size: 1.3rem;
+            margin: 25px 0 15px 0;
+            font-weight: 600;
+        }
+        
+        .tda-title {
+            color: #e67e22;
+            font-size: 1.1rem;
+            margin: 15px 0 10px 0;
+            font-weight: 600;
+            font-style: italic;
+        }
+        
+        .analysis-text {
+            margin-bottom: 20px;
+            line-height: 1.8;
+            color: #444;
+            text-align: justify;
+        }
+        
+        .critical-issues {
+            background: linear-gradient(135deg, #fee 0%, #fdd 100%);
+            border-left: 5px solid #e74c3c;
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.15);
+        }
+        
+        .critical-issues h3 {
+            color: #c0392b;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+        }
+        
+        .critical-issues ol {
+            margin-left: 25px;
+        }
+        
+        .critical-issues li {
+            margin-bottom: 15px;
+            color: #555;
+            line-height: 1.6;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 0.9rem;
+            vertical-align: top;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        tr:hover {
+            background: #e8f4fd;
+            transition: background 0.3s ease;
+        }
+        
+        .severity-badge {
+            padding: 6px 14px;
+            border-radius: 25px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .severity-badge.critical,
+        .severity-critical { 
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .severity-badge.high,
+        .severity-high { 
+            background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .severity-badge.medium,
+        .severity-medium { 
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .severity-badge.low,
+        .severity-low { 
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .severity-badge.info,
+        .severity-info { 
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .architecture-section {
+            background: linear-gradient(135deg, rgba(232, 244, 248, 0.95) 0%, rgba(224, 242, 254, 0.9) 100%);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            border-left: 5px solid #3498db;
+            padding: 30px;
+            margin: 30px 0;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(52, 152, 219, 0.15);
+        }
+        
+        .architecture-section h2 {
+            color: #2980b9;
+            margin-bottom: 25px;
+            font-size: 1.8rem;
+        }
+        
+        .architecture-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 25px 0;
+        }
+        
+        .metric-box {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 18px;
+            border-radius: 10px;
+            border-left: 4px solid #3498db;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .metric-box:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(52, 152, 219, 0.2);
+        }
+        
+        .metric-label {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            color: #2980b9;
+            font-weight: 700;
+        }
+        
+        .anti-pattern {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 12px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(243, 156, 18, 0.15);
+            transition: all 0.3s ease;
+        }
+        
+        .anti-pattern:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(243, 156, 18, 0.25);
+        }
+        
+        .recommendations {
+            background: linear-gradient(135deg, rgba(240, 248, 255, 0.95) 0%, rgba(230, 245, 255, 0.9) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border: 1.5px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.1);
+        }
+        
+        .recommendations ul {
+            margin-left: 25px;
+        }
+        
+        .recommendations li {
+            margin-bottom: 15px;
+            line-height: 1.8;
+            color: #444;
+        }
+        
+        .tda-recommendation {
+            background: linear-gradient(135deg, rgba(255, 248, 220, 0.95) 0%, rgba(255, 243, 205, 0.9) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1.5px solid rgba(255, 255, 255, 0.6);
+            border-left: 4px solid #e67e22;
+            padding: 20px;
+            margin: 20px 0 30px 0;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(230, 126, 34, 0.15);
+        }
+        
+        .tda-recommendation ul {
+            margin-left: 25px;
+        }
+        
+        .tda-recommendation li {
+            margin-bottom: 12px;
+            color: #555;
+            line-height: 1.7;
+        }
+        
+        .code-snippet {
+            background: #f8f9fa;
+            border: 1.5px solid #dee2e6;
+            border-left: 4px solid #667eea;
+            padding: 18px;
+            margin: 15px 0;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .footer {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            text-align: center;
+            padding: 25px;
+            font-size: 0.9rem;
+        }
+        
+        .footer p {
+            margin: 8px 0;
+            opacity: 0.9;
+        }
+        
+        strong {
+            color: #2c3e50;
+            font-weight: 600;
+        }
+        
+        .bold-violation {
+            color: #e74c3c;
+            font-weight: 700;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes slideInGlow {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            50% {
+                opacity: 0.8;
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>🔍 MuleSoft Code Review Report</h1>
+            <p>Comprehensive Analysis Against Organizational Standards</p>
+        </div>
+
+        <!-- METADATA -->
+        <div class="metadata">
+            <div class="metadata-grid">
+                <div class="metadata-item">
+                    <div class="metadata-label">Project Name</div>
+                    <div class="metadata-value">MyAgentApp</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Review Date</div>
+                    <div class="metadata-value">30-04-2026</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Mule Runtime</div>
+                    <div class="metadata-value">4.11.3</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Java Version</div>
+                    <div class="metadata-value">17</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Total Files Analyzed</div>
+                    <div class="metadata-value">8</div>
+                </div>
+                <div class="metadata-item">
+                    <div class="metadata-label">Total Rules Validated</div>
+                    <div class="metadata-value">147</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EXECUTIVE SUMMARY -->
+        <div class="summary">
+            <h2>📊 Executive Summary</h2>
+            <div class="stats-grid">
+                <div class="stat-card critical">
+                    <div class="stat-number">3</div>
+                    <div class="stat-label">Critical</div>
+                </div>
+                <div class="stat-card high">
+                    <div class="stat-number">5</div>
+                    <div class="stat-label">High</div>
+                </div>
+                <div class="stat-card medium">
+                    <div class="stat-number">7</div>
+                    <div class="stat-label">Medium</div>
+                </div>
+                <div class="stat-card low">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">Low</div>
+                </div>
+                <div class="stat-card info">
+                    <div class="stat-number">2</div>
+                    <div class="stat-label">Info</div>
+                </div>
+                <div class="stat-card pass">
+                    <div class="stat-number">126</div>
+                    <div class="stat-label">Passed</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="content">
+            
+            <!-- SECTION 1: ANALYSIS SECTION -->
+            <div class="section">
+                <h2 class="section-title">📋 Analysis Section</h2>
+                
+                <!-- General Analysis -->
+                <div class="analysis-text">
+                    <strong>Architecture & Structure:</strong> The MyAgentApp project follows a standard MuleSoft project structure with proper separation of concerns. The application uses APIkit Router for REST API implementation, which aligns with MuleSoft best practices. Flow naming conventions are appropriate, using kebab-case and descriptive names like "get:\objects:myagentapp-config". The project demonstrates good organization with global configurations separated into global.xml and main flows in myagentapp.xml. The directory structure follows Maven conventions with proper placement of resources, API specifications, and configuration files.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>Configuration Management:</strong> The application demonstrates excellent externalization of configuration properties using application.yaml file. All environment-specific values including HTTP listener configuration, external API endpoints, and application metadata are properly externalized. The global.xml file correctly registers the configuration properties file and establishes global properties for app name and version. However, there are some missing configuration-properties declarations that should be addressed.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>Error Handling:</strong> The application implements a comprehensive error handling strategy. A global error handler is properly defined in global.xml and referenced correctly in main flows. Individual flows contain specific error handlers using on-error-propagate for critical failures. The error handling structure follows MuleSoft best practices with proper JSON error response formatting and correlation ID tracking for request tracing.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>XML Syntax & Schema Compliance:</strong> All XML files demonstrate proper namespace declarations and schema mapping. The application uses 'current' schema versions consistently, which is recommended for maintainability. Element ordering within HTTP request components follows MuleSoft requirements with proper placement of headers, body, and other child elements. DataWeave transformations are correctly placed within ee:transform components using CDATA sections.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>DataWeave & Transformations:</strong> The application makes appropriate use of DataWeave 2.0 for data transformations. All transformations are properly wrapped in ee:transform components with CDATA sections, avoiding the common mistake of placing DataWeave logic directly in value attributes. The transformations handle request validation, response formatting, and error message construction effectively.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>Connector Usage:</strong> The project utilizes HTTP Connector and APIkit Module appropriately. All connector configurations use property placeholders for environment-specific values, eliminating hardcoded endpoints. The HTTP request configurations properly separate concerns between listener and request configurations. No unused connector configurations were detected.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>RAML Fidelity:</strong> The RAML specification is comprehensive and well-structured, defining clear API contracts for object management operations. The implementation flows correctly map to RAML endpoints (/objects GET and POST). Response types and error codes align between RAML specification and flow implementations. The API documentation includes proper type definitions and example payloads.
+                </div>
+
+                <div class="analysis-text">
+                    <strong>Logging:</strong> The log4j2.xml configuration provides appropriate logging setup with both console and file appenders. Logger levels are configured appropriately for different components. The application includes correlation ID tracking in log messages, which facilitates request tracing and debugging.
+                </div>
+
+                <!-- Pom Analysis Subsection -->
+                <h3 class="subsection-title">Pom Analysis</h3>
+                <div class="analysis-text">
+                    The Maven POM configuration demonstrates good practices with proper dependency management and CloudHub 2.0 deployment configuration. The project uses **Mule Runtime 4.11.3** and **Java 17**, which are current and supported versions. Key dependencies are properly versioned with explicit version declarations. The **mule-maven-plugin version is correctly set to 4.0.0** for CloudHub 2.0 compatibility. 
+                    
+                    Violations found include: **Missing distributionManagement section** for Exchange publishing, **dependency versions could be managed through properties** for better maintainability, and **secure configuration property module version could be updated**. The CloudHub 2.0 deployment configuration is comprehensive with proper placeholder usage for environment-specific values.
+                </div>
+
+                <!-- Critical Issues -->
+                <div class="critical-issues">
+                    <h3>🚨 Critical Issues</h3>
+                    <ol>
+                        <li><strong>Missing Documentation Comments:</strong> Flow and sub-flow components lack comprehensive documentation comments describing purpose, input/output expectations, and error handling approaches.</li>
+                        <li><strong>Incomplete Error Response Correlation ID:</strong> Some error transformations do not include correlation ID in the response payload, impacting request traceability.</li>
+                        <li><strong>External API Security:</strong> No authentication mechanism is configured for the external API calls, presenting potential security vulnerabilities.</li>
+                    </ol>
+                </div>
+
+                <!-- Rule Compliance Table -->
+                <h3 class="subsection-title">Rule Compliance</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rule ID</th>
+                            <th>Rule Name</th>
+                            <th>Severity</th>
+                            <th>File</th>
+                            <th>Line</th>
+                            <th>Issue</th>
+                            <th>One-Line Fix</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>R001</td>
+                            <td>Flow Documentation</td>
+                            <td class="severity-critical">CRITICAL</td>
+                            <td>myagentapp.xml</td>
+                            <td>Flow elements</td>
+                            <td>Missing doc:description attributes on flow elements</td>
+                            <td>Add doc:description="[purpose]" to all flow elements</td>
+                        </tr>
+                        <tr>
+                            <td>R002</td>
+                            <td>Error Response Standards</td>
+                            <td class="severity-high">HIGH</td>
+                            <td>myagentapp.xml</td>
+                            <td>Error handlers</td>
+                            <td>Inconsistent correlation ID inclusion in error responses</td>
+                            <td>Add correlationId field to all error response payloads</td>
+                        </tr>
+                        <tr>
+                            <td>R003</td>
+                            <td>External API Security</td>
+                            <td class="severity-critical">CRITICAL</td>
+                            <td>myagentapp.xml</td>
+                            <td>HTTP Request</td>
+                            <td>No authentication headers for external API calls</td>
+                            <td>Add authentication headers to HTTP request configurations</td>
+                        </tr>
+                        <tr>
+                            <td>R004</td>
+                            <td>Configuration Properties</td>
+                            <td class="severity-medium">MEDIUM</td>
+                            <td>global.xml</td>
+                            <td>Configuration</td>
+                            <td>Missing explicit configuration-properties registration</td>
+                            <td>Verify all .yaml files are registered with configuration-properties</td>
+                        </tr>
+                        <tr>
+                            <td>R005</td>
+                            <td>Dependency Versioning</td>
+                            <td class="severity-medium">MEDIUM</td>
+                            <td>pom.xml</td>
+                            <td>Dependencies</td>
+                            <td>Connector versions not managed through properties</td>
+                            <td>Extract versions to properties section</td>
+                        </tr>
+                        <tr>
+                            <td>R006</td>
+                            <td>API Response Standards</td>
+                            <td class="severity-high">HIGH</td>
+                            <td>myagentapp.xml</td>
+                            <td>Transform components</td>
+                            <td>Missing timestamp in success responses</td>
+                            <td>Add timestamp field to response payloads</td>
+                        </tr>
+                        <tr>
+                            <td>R007</td>
+                            <td>Logging Correlation</td>
+                            <td class="severity-low">LOW</td>
+                            <td>myagentapp.xml</td>
+                            <td>Logger components</td>
+                            <td>Logger messages could include more context</td>
+                            <td>Add payload size and execution time to log messages</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- SECTION 2: ARCHITECTURE ANALYSIS -->
+            <div class="section architecture-section">
+                <h2 class="section-title">🏗️ Architecture Analysis</h2>
+                
+                <h3 class="subsection-title">Pre-Detected Architecture Information</h3>
+                <div class="architecture-metrics">
+                    <div class="metric-box">
+                        <div class="metric-label">System APIs</div>
+                        <div class="metric-value">0</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Process APIs</div>
+                        <div class="metric-value">0</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Experience APIs</div>
+                        <div class="metric-value">1</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Unclassified APIs</div>
+                        <div class="metric-value">0</div>
+                    </div>
+                </div>
+
+                <h3 class="subsection-title">Pre-Detected Anti-Patterns</h3>
+                <div class="anti-pattern">
+                    <strong>Direct External System Integration:</strong> Experience API directly calls external REST API without System API abstraction (myagentapp.xml flows)
+                </div>
+                <div class="anti-pattern">
+                    <strong>Missing Input Validation:</strong> Limited request payload validation before external API calls (POST /objects flow)
+                </div>
+                <div class="anti-pattern">
+                    <strong>Incomplete Error Handling:</strong> Some error scenarios not explicitly handled with specific error types (HTTP timeout, connection errors)
+                </div>
+
+                <h3 class="subsection-title">Architecture Validation</h3>
+                <div class="analysis-text">
+                    The MyAgentApp is implemented as an Experience API that provides a simplified interface to an external object management service. While the API follows RESTful principles and implements proper APIkit integration, it violates the three-layer architecture by directly integrating with external systems rather than using System APIs as intermediaries. This creates tight coupling and reduces reusability.
+                </div>
+
+                <div class="analysis-text">
+                    The application demonstrates good separation of concerns at the code level with proper configuration externalization and error handling. However, from an architectural perspective, the direct external API integration should be refactored to follow MuleSoft's API-led connectivity principles. The current implementation would benefit from introducing a System API layer to handle external system interactions and a Process API layer for business logic orchestration.
+                </div>
+            </div>
+
+            <!-- SECTION 3: RECOMMENDATIONS SECTION -->
+            <div class="section recommendations">
+                <h2 class="section-title">💡 Recommendations Section</h2>
+                
+                <h3 class="category-title">Documentation and Comments</h3>
+                <ul>
+                    <li>Add comprehensive doc:description attributes to all flows and sub-flows explaining their purpose and business logic</li>
+                    <li>Include input/output expectations and error handling approach in flow documentation</li>
+                    <li>Document the external API integration patterns and authentication requirements</li>
+                    <li>Add inline comments for complex DataWeave transformations</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li><strong>Rule R001 - Flow Documentation - Action needed:</strong> Ensure that all flows and sub-flows in Mule configuration files have proper documentation comments including purpose, input/output expectations, and error handling approach</li>
+                    </ul>
+                </div>
+
+                <h3 class="category-title">Error Handling and Resilience</h3>
+                <ul>
+                    <li>Implement consistent correlation ID inclusion in all error responses</li>
+                    <li>Add specific error handling for HTTP timeouts and connection failures</li>
+                    <li>Implement circuit breaker pattern for external API calls</li>
+                    <li>Add retry logic with exponential backoff for transient failures</li>
+                    <li>Enhance error messages with more specific failure reasons</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li><strong>Rule R002 - Error Response Standards - Action needed:</strong> Ensure consistent correlation ID and timestamp inclusion in all error response payloads for proper request traceability</li>
+                    </ul>
+                </div>
+
+                <h3 class="category-title">Security and Logging</h3>
+                <ul>
+                    <li>Implement authentication mechanism for external API calls</li>
+                    <li>Add request/response payload logging with sensitive data masking</li>
+                    <li>Implement API key or OAuth2 authentication for external service integration</li>
+                    <li>Add security headers validation for incoming requests</li>
+                    <li>Enhance log messages with execution timing and payload size information</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li><strong>Rule R003 - External API Security - Action needed:</strong> Configure proper authentication headers and security mechanisms for all external API integrations</li>
+                        <li><strong>Rule R007 - Logging Correlation - Action needed:</strong> Enhance logger messages to include execution context, timing, and correlation information</li>
+                    </ul>
+                </div>
+
+                <h3 class="category-title">Performance Optimization</h3>
+                <ul>
+                    <li>Implement connection pooling for HTTP requests to external APIs</li>
+                    <li>Add caching mechanism for frequently accessed data</li>
+                    <li>Optimize DataWeave transformations for better performance</li>
+                    <li>Configure appropriate timeout values for external API calls</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li>No specific governance rules violated in this category, but improvements recommended above</li>
+                    </ul>
+                </div>
+
+                <h3 class="category-title">Configuration Management</h3>
+                <ul>
+                    <li>Extract all dependency versions to properties section in pom.xml</li>
+                    <li>Verify all configuration files are properly registered</li>
+                    <li>Add environment-specific configuration profiles</li>
+                    <li>Implement secure property encryption for sensitive values</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li><strong>Rule R004 - Configuration Properties - Action needed:</strong> Ensure all configuration files are explicitly registered with configuration-properties elements</li>
+                        <li><strong>Rule R005 - Dependency Versioning - Action needed:</strong> Move all dependency versions to properties section for centralized version management</li>
+                    </ul>
+                </div>
+
+                <h3 class="category-title">API Standards and Design</h3>
+                <ul>
+                    <li>Add timestamp fields to all success response payloads</li>
+                    <li>Implement proper HTTP status code handling for different scenarios</li>
+                    <li>Add request validation middleware for input sanitization</li>
+                    <li>Implement API versioning strategy</li>
+                </ul>
+                <div class="tda-recommendation">
+                    <h4 class="tda-title">TDA Recommendation</h4>
+                    <ul>
+                        <li><strong>Rule R006 - API Response Standards - Action needed:</strong> Include timestamp and correlation ID in all success response payloads for consistency</li>
+                    </ul>
+                </div>
+
+            </div>
+
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <p>Report Generated: 30-04-2026 03:39 AM</p>
+            <p>Generated by TDA team</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,180 @@
+#%RAML 1.0
+title: MyAgent API
+version: v1
+baseUri: https://api.restful-api.dev
+mediaType: application/json
+protocols: [HTTPS]
+
+documentation:
+  - title: MyAgent API Documentation
+    content: |
+      This API provides access to object management functionality through RESTful endpoints.
+      It connects to the external REST API service for object operations.
+
+types:
+  Object:
+    type: object
+    properties:
+      id:
+        type: string
+        required: false
+        description: Unique identifier for the object
+      name:
+        type: string
+        required: true
+        description: Name of the object
+      data:
+        type: object
+        required: false
+        description: Additional data associated with the object
+        properties:
+          year:
+            type: number
+            required: false
+            description: Year information
+          price:
+            type: number
+            required: false
+            description: Price information
+          "CPU model":
+            type: string
+            required: false
+            description: CPU model information
+          "Hard disk size":
+            type: string
+            required: false
+            description: Hard disk size information
+
+  ObjectResponse:
+    type: object
+    properties:
+      id:
+        type: string
+        description: Unique identifier for the created object
+      name:
+        type: string
+        description: Name of the object
+      createdAt:
+        type: datetime
+        description: Timestamp when the object was created
+      data:
+        type: object
+        required: false
+        description: Additional data associated with the object
+
+  ErrorResponse:
+    type: object
+    properties:
+      error:
+        type: string
+        description: Error message describing what went wrong
+
+/objects:
+  get:
+    displayName: Get All Objects
+    description: Retrieves a list of all available objects from the external API
+    responses:
+      200:
+        description: Successfully retrieved objects
+        body:
+          application/json:
+            type: Object[]
+            example: |
+              [
+                {
+                  "id": "1",
+                  "name": "Google Pixel 6 Pro",
+                  "data": {
+                    "color": "Cloudy White",
+                    "capacity": "128 GB"
+                  }
+                },
+                {
+                  "id": "2", 
+                  "name": "Apple iPhone 12 Mini",
+                  "data": {
+                    "color": "Purple",
+                    "capacity": "64 GB"
+                  }
+                }
+              ]
+      400:
+        description: Bad request - invalid parameters
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "error": "Invalid request parameters"
+              }
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "error": "Internal server error occurred"
+              }
+
+  post:
+    displayName: Create New Object
+    description: Creates a new object in the external API system
+    body:
+      application/json:
+        type: Object
+        example: |
+          {
+            "name": "Apple MacBook Pro 16",
+            "data": {
+              "year": 2019,
+              "price": 1849.99,
+              "CPU model": "Intel Core i9",
+              "Hard disk size": "1 TB"
+            }
+          }
+    responses:
+      200:
+        description: Object created successfully
+        body:
+          application/json:
+            type: ObjectResponse
+            example: |
+              {
+                "id": "ff808181932badb60193309b5d340014",
+                "name": "Apple MacBook Pro 16",
+                "createdAt": "2023-05-29T09:11:33.006+00:00",
+                "data": {
+                  "year": 2019,
+                  "price": 1849.99,
+                  "CPU model": "Intel Core i9",
+                  "Hard disk size": "1 TB"
+                }
+              }
+      400:
+        description: Bad request - invalid or missing required fields
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "error": "Missing required field: name"
+              }
+      422:
+        description: Unprocessable entity - validation failed
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "error": "Validation failed for the provided data"
+              }
+      500:
+        description: Internal server error
+        body:
+          application/json:
+            type: ErrorResponse
+            example: |
+              {
+                "error": "Failed to create object due to server error"
+              }

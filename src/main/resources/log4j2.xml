@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+    <Appenders>
+        <!-- Console Appender -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+        
+        <!-- File Appender -->
+        <File name="FileAppender" fileName="logs/myagentapp.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </File>
+    </Appenders>
+    
+    <Loggers>
+        <!-- Application specific logging -->
+        <Logger name="com.mulesoft" level="INFO"/>
+        <Logger name="org.mule" level="INFO"/>
+        <Logger name="org.springframework" level="WARN"/>
+        <Logger name="org.apache" level="WARN"/>
+        
+        <!-- APIKit specific logging -->
+        <Logger name="org.mule.module.apikit" level="INFO"/>
+        
+        <!-- HTTP request/response logging -->
+        <Logger name="org.mule.transport.http" level="DEBUG"/>
+        <Logger name="httpclient.wire" level="DEBUG"/>
+        
+        <!-- Root logger -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FileAppender"/>
+        </Root>
+    </Loggers>
+</Configuration>

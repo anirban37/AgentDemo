@@ -1,0 +1,36 @@
+# Mule Runtime
+target/
+.mule/
+deployments/
+*.zip
+
+# IDE
+.classpath
+.project
+.settings/
+.metadata/
+.idea/
+*.iml
+.vscode/
+
+# Maven
+dependency-reduced-pom.xml
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Anypoint Studio
+.studio/
+
+# Environment specific
+*.bak
+*~
+
+# CRITICAL: Protect credentials
+.credentials/
+*.credentials
