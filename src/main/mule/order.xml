@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mule-apikit
+        http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd">
+
+    <!-- HTTP Listener Config -->
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <!-- APIKit Router Config -->
+    <apikit:config name="api-config" api="api.raml" raml="api.raml"
+                   outboundHeadersMapName="outboundHeaders"
+                   httpStatusVarName="httpStatus"/>
+
+    <!-- Main Flow -->
+    <flow name="api-main">
+        <http:listener config-ref="HTTP_Listener_config" path="/api/*" doc:name="HTTP Listener"/>
+        <apikit:router config-ref="api-config" doc:name="APIKit Router"/>
+        <error-handler>
+            <on-error-propagate type="APIKIT:NOT_FOUND">
+                <set-variable variableName="httpStatus" value="404" doc:name="Set 404"/>
+                <set-payload value='{"error": "Resource not found"}' doc:name="Not Found Payload"/>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:METHOD_NOT_ALLOWED">
+                <set-variable variableName="httpStatus" value="405" doc:name="Set 405"/>
+                <set-payload value='{"error": "Method not allowed"}' doc:name="Method Not Allowed Payload"/>
+            </on-error-propagate>
+            <on-error-propagate type="APIKIT:BAD_REQUEST">
+                <set-variable variableName="httpStatus" value="400" doc:name="Set 400"/>
+                <set-payload value='{"error": "Bad request"}' doc:name="Bad Request Payload"/>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+
+    <!-- /orderManagement GET — IMPLEMENTED -->
+    <flow name="get:\orderManagement:api-config">
+        <set-payload doc:name="Get Orders Response"
+            value='[{"orderId": "ORD001", "status": "active"}, {"orderId": "ORD002", "status": "pending"}]'
+            mimeType="application/json"/>
+    </flow>
+
+    <!-- /orderManagement POST — IMPLEMENTED -->
+    <flow name="post:\orderManagement:api-config">
+        <set-payload doc:name="Create Order Response"
+            value='{"orderId": "ORD003", "status": "created"}'
+            mimeType="application/json"/>
+    </flow>
+
+    <!-- /productCatalog GET — IMPLEMENTED -->
+    <flow name="get:\productCatalog:api-config">
+        <set-payload doc:name="Get Products Response"
+            value='[{"productId": "PROD001", "name": "Widget", "price": 9.99}]'
+            mimeType="application/json"/>
+    </flow>
+
+    <!-- /productCatalog POST — IMPLEMENTED -->
+    <flow name="post:\productCatalog:api-config">
+        <set-payload doc:name="Create Product Response"
+            value='{"productId": "PROD002", "status": "created"}'
+            mimeType="application/json"/>
+    </flow>
+
+    <!--
+        /productCatalog PUT — INTENTIONALLY NOT IMPLEMENTED
+        No flow exists for: put:\productCatalog:api-config
+        Scanner should detect this as missing and flag it.
+    -->
+
+</mule>
