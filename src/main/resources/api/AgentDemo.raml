@@ -1,0 +1,62 @@
+#%RAML 1.0
+title: Order Management API
+version: v1
+baseUri: http://localhost:8081/api
+
+/orderManagement:
+  description: Manages customer orders
+  get:
+    description: Retrieve all orders
+    responses:
+      200:
+        body:
+          application/json:
+            example: |
+              [{"orderId": "ORD001", "status": "active"}]
+  post:
+    description: Create a new order
+    body:
+      application/json:
+        example: |
+          {"customerId": "CUST001", "item": "Widget", "quantity": 2}
+    responses:
+      201:
+        body:
+          application/json:
+            example: |
+              {"orderId": "ORD002", "status": "created"}
+
+/productCatalog:
+  description: Manages the product catalog
+  get:
+    description: Retrieve all products
+    responses:
+      200:
+        body:
+          application/json:
+            example: |
+              [{"productId": "PROD001", "name": "Widget", "price": 9.99}]
+  post:
+    description: Add a new product
+    body:
+      application/json:
+        example: |
+          {"name": "Gadget", "price": 14.99}
+    responses:
+      201:
+        body:
+          application/json:
+            example: |
+              {"productId": "PROD002", "status": "created"}
+  put:
+    description: Update an existing product
+    body:
+      application/json:
+        example: |
+          {"productId": "PROD001", "price": 11.99}
+    responses:
+      200:
+        body:
+          application/json:
+            example: |
+              {"productId": "PROD001", "status": "updated"}
