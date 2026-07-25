@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd">
+
+    <munit:config name="all-three-findings-suite"/>
+
+    <munit:test name="TC-01-no-assertions-no-errors-over-mocked"
+                description="Triggers all 3 efficacy findings">
+
+        <munit:behavior>
+            <!-- Mock 1: triggers over-mock condition (mockCount=2, flowRefCount=1) -->
+            <munit-tools:mock-when processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Call Service A"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value='{"result": "ok"}' mediaType="application/json"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+            <!-- Mock 2: second mock — now mockCount > flowRefCount -->
+            <munit-tools:mock-when processor="db:select">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute attributeName="doc:name" whereValue="Query DB"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value='[]' mediaType="application/json"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <!-- Only 1 flow-ref but 2 mocks above = over-mocking -->
+            <flow-ref name="get:\orderManagement:api-config" doc:name="Call main flow"/>
+            <!-- No raise-error = Happy Path Only -->
+            <!-- No set-payload with error scenario -->
+        </munit:execution>
+
+        <munit:validation>
+            <!-- No munit-tools:assert-that = Missing Assertions -->
+            <!-- No logger level="INFO" -->
+            <!-- Intentionally empty validation block -->
+        </munit:validation>
+
+    </munit:test>
+
+</mule>

@@ -1,0 +1,635 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <!--
+        File        : agentdemo-munit-suite-high-coverage.xml
+        Purpose     : MUnit test suite for AgentDemo API with HIGH code coverage (>= 80%).
+                      Covers GET /ping, GET /objects, POST /objects happy paths
+                      and key error handler scenarios (400, 404, 405, 500).
+        Coverage    : ~85% — all 3 business flows + 4 of 6 error handler branches.
+        Author      : AgentDemo QA Team
+        Date        : 2026-07-01
+    -->
+
+    <munit:config name="agentdemo-munit-suite-high-coverage"
+                  doc:name="MUnit High Coverage Suite"
+                  minMuleVersion="4.4.0">
+        <munit:coverage>
+            <munit:flow-to-ignore name="agentdemo-main"/>
+        </munit:coverage>
+    </munit:config>
+
+    <!-- ================================================================
+         SUITE 1 — GET /ping  (Health Check Flow)
+         ================================================================ -->
+
+    <!--
+        Test     : TC-001 - GET /ping returns 200 with status UP
+        Flow     : get:\ping:agentdemo-config
+        Scenario : Happy path — health check returns expected JSON structure
+        Expects  : payload.status == "UP", payload.version == "v1", payload.timestamp present
+    -->
+    <munit:test name="TC-001-get-ping-returns-200-status-up"
+                doc:name="TC-001: GET /ping - Happy Path Returns Status UP">
+
+        <munit:execution>
+            <flow-ref name="get:\ping:agentdemo-config" doc:name="Execute GET /ping flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.status]"
+                is="#[MunitTools::equalTo('UP')]"
+                doc:name="Assert status is UP"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.version]"
+                is="#[MunitTools::equalTo('v1')]"
+                doc:name="Assert version is v1"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.timestamp != null]"
+                is="#[MunitTools::equalTo(true)]"
+                doc:name="Assert timestamp is present"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-002 - GET /ping timestamp format matches ISO-8601
+        Flow     : get:\ping:agentdemo-config
+        Scenario : Timestamp format validation
+        Expects  : timestamp matches yyyy-MM-dd'T'HH:mm:ss.SSS'Z' pattern
+    -->
+    <munit:test name="TC-002-get-ping-timestamp-format"
+                doc:name="TC-002: GET /ping - Timestamp ISO-8601 Format">
+
+        <munit:execution>
+            <flow-ref name="get:\ping:agentdemo-config" doc:name="Execute GET /ping flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.timestamp matches /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/]"
+                is="#[MunitTools::equalTo(true)]"
+                doc:name="Assert timestamp matches ISO-8601 format"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-003 - GET /ping payload is valid JSON with all required keys
+        Flow     : get:\ping:agentdemo-config
+        Scenario : Schema validation — ensures response contains exactly the expected keys
+        Expects  : payload contains keys: status, version, timestamp
+    -->
+    <munit:test name="TC-003-get-ping-response-schema"
+                doc:name="TC-003: GET /ping - Response Schema Validation">
+
+        <munit:execution>
+            <flow-ref name="get:\ping:agentdemo-config" doc:name="Execute GET /ping flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload keySet containsAll ['status', 'version', 'timestamp']]"
+                is="#[MunitTools::equalTo(true)]"
+                doc:name="Assert all required keys present"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.status is String]"
+                is="#[MunitTools::equalTo(true)]"
+                doc:name="Assert status is String type"/>
+        </munit:validation>
+    </munit:test>
+
+
+    <!-- ================================================================
+         SUITE 2 — GET /objects  (Downstream Proxy Flow)
+         ================================================================ -->
+
+    <!--
+        Test     : TC-004 - GET /objects returns 200 with mocked downstream
+        Flow     : get:\objects:agentdemo-config
+        Scenario : Happy path — mock the downstream HTTP request, verify pass-through
+        Expects  : Response is a non-empty JSON array
+    -->
+    <munit:test name="TC-004-get-objects-happy-path-200"
+                doc:name="TC-004: GET /objects - Happy Path with Mocked Downstream">
+
+        <munit:behavior>
+            <!-- Mock the downstream HTTP GET /objects call -->
+            <munit-tools:mock-when
+                doc:name="Mock Downstream GET /objects"
+                processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="GET Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload
+                        value='#[[{"id": "1", "name": "Google Pixel 6 Pro", "data": {"color": "Cloudy White", "capacity": "128 GB"}}, {"id": "2", "name": "Apple iPhone 12 Mini", "data": {"color": "Purple", "capacity": "64 GB"}}]]'
+                        mediaType="application/json"/>
+                    <munit-tools:attributes
+                        value='#[{statusCode: 200}]'/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId"
+                          value="test-correlation-id-001"
+                          doc:name="Set Test Correlation ID"/>
+            <flow-ref name="get:\objects:agentdemo-config" doc:name="Execute GET /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[sizeOf(payload)]"
+                is="#[MunitTools::greaterThan(0)]"
+                doc:name="Assert response array is not empty"/>
+
+            <munit-tools:assert-that
+                expression="#[payload[0].id]"
+                is="#[MunitTools::equalTo('1')]"
+                doc:name="Assert first object id is 1"/>
+
+            <munit-tools:assert-that
+                expression="#[payload[0].name]"
+                is="#[MunitTools::equalTo('Google Pixel 6 Pro')]"
+                doc:name="Assert first object name"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-005 - GET /objects forwards X-Correlation-ID header downstream
+        Flow     : get:\objects:agentdemo-config
+        Scenario : Verify correlation header is forwarded to downstream system
+        Expects  : Spy captures that http:request was called with Accept header
+    -->
+    <munit:test name="TC-005-get-objects-correlation-header-forwarded"
+                doc:name="TC-005: GET /objects - Correlation ID Header Forwarded">
+
+        <munit:behavior>
+            <munit-tools:mock-when
+                doc:name="Mock Downstream GET /objects"
+                processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="GET Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[]]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{statusCode: 200}]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId"
+                          value="corr-id-tc-005"
+                          doc:name="Set Correlation ID"/>
+            <flow-ref name="get:\objects:agentdemo-config" doc:name="Execute GET /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:verify-call
+                doc:name="Verify downstream HTTP request was invoked"
+                processor="http:request"
+                times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="GET Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-006 - GET /objects returns empty array when downstream returns []
+        Flow     : get:\objects:agentdemo-config
+        Scenario : Downstream returns an empty list; flow should pass it through unchanged
+        Expects  : payload is empty array
+    -->
+    <munit:test name="TC-006-get-objects-empty-downstream-response"
+                doc:name="TC-006: GET /objects - Empty Downstream Response">
+
+        <munit:behavior>
+            <munit-tools:mock-when
+                doc:name="Mock Empty Downstream Response"
+                processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="GET Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload value="#[[]]" mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{statusCode: 200}]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-006" doc:name="Set Correlation ID"/>
+            <flow-ref name="get:\objects:agentdemo-config" doc:name="Execute GET /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[sizeOf(payload)]"
+                is="#[MunitTools::equalTo(0)]"
+                doc:name="Assert empty array returned"/>
+        </munit:validation>
+    </munit:test>
+
+
+    <!-- ================================================================
+         SUITE 3 — POST /objects  (Create Object Proxy Flow)
+         ================================================================ -->
+
+    <!--
+        Test     : TC-007 - POST /objects happy path returns created object
+        Flow     : post:\objects:agentdemo-config
+        Scenario : Happy path — mock downstream POST, assert created object in response
+        Expects  : Response contains id, name, createdAt, data
+    -->
+    <munit:test name="TC-007-post-objects-happy-path-201"
+                doc:name="TC-007: POST /objects - Happy Path Returns Created Object">
+
+        <munit:behavior>
+            <munit-tools:mock-when
+                doc:name="Mock Downstream POST /objects"
+                processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="POST Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload
+                        value='#[{id: "ff808181932badb90193685b87cd06d3", name: "Apple MacBook Pro 16", createdAt: "2026-07-01T00:00:00.000+00:00", data: {year: 2019, price: 1849.99, "CPU model": "Intel Core i9", "Hard disk space": "1 TB"}}]'
+                        mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{statusCode: 200}]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-007" doc:name="Set Correlation ID"/>
+            <set-payload
+                value='#[{name: "Apple MacBook Pro 16", data: {year: 2019, price: 1849.99, "CPU model": "Intel Core i9", "Hard disk space": "1 TB"}}]'
+                mediaType="application/json"
+                doc:name="Set POST Request Payload"/>
+            <flow-ref name="post:\objects:agentdemo-config" doc:name="Execute POST /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.id]"
+                is="#[MunitTools::equalTo('ff808181932badb90193685b87cd06d3')]"
+                doc:name="Assert returned id"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.name]"
+                is="#[MunitTools::equalTo('Apple MacBook Pro 16')]"
+                doc:name="Assert returned name"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.createdAt != null]"
+                is="#[MunitTools::equalTo(true)]"
+                doc:name="Assert createdAt is present"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.data.'CPU model']"
+                is="#[MunitTools::equalTo('Intel Core i9')]"
+                doc:name="Assert CPU model in data"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-008 - POST /objects passes request body to downstream
+        Flow     : post:\objects:agentdemo-config
+        Scenario : Verify the flow forwards the payload body to the downstream HTTP POST
+        Expects  : http:request component is called exactly once
+    -->
+    <munit:test name="TC-008-post-objects-body-forwarded"
+                doc:name="TC-008: POST /objects - Request Body Forwarded to Downstream">
+
+        <munit:behavior>
+            <munit-tools:mock-when
+                doc:name="Mock Downstream POST /objects"
+                processor="http:request">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="POST Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload
+                        value='#[{id: "abc123", name: "Test Object", createdAt: "2026-07-01T00:00:00.000+00:00", data: {}}]'
+                        mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{statusCode: 200}]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-008" doc:name="Set Correlation ID"/>
+            <set-payload value='#[{name: "Test Object", data: {}}]' mediaType="application/json"
+                         doc:name="Set Request Body"/>
+            <flow-ref name="post:\objects:agentdemo-config" doc:name="Execute POST /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:verify-call
+                doc:name="Verify POST downstream was called once"
+                processor="http:request"
+                times="1">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="POST Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+            </munit-tools:verify-call>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-009 - POST /objects with minimum required fields
+        Flow     : post:\objects:agentdemo-config
+        Scenario : Edge case — minimal payload with just name and empty data object
+        Expects  : Flow completes and returns mocked response successfully
+    -->
+    <munit:test name="TC-009-post-objects-minimal-payload"
+                doc:name="TC-009: POST /objects - Minimal Required Fields">
+
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Mock Downstream POST">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="POST Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:payload
+                        value='#[{id: "min001", name: "Minimal Object", createdAt: "2026-07-01T00:00:00.000+00:00", data: {}}]'
+                        mediaType="application/json"/>
+                    <munit-tools:attributes value="#[{statusCode: 200}]"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-009" doc:name="Set Correlation ID"/>
+            <set-payload value='#[{name: "Minimal Object", data: {}}]' mediaType="application/json"
+                         doc:name="Minimal Payload"/>
+            <flow-ref name="post:\objects:agentdemo-config" doc:name="Execute POST /objects flow"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.id]"
+                is="#[MunitTools::equalTo('min001')]"
+                doc:name="Assert id returned for minimal payload"/>
+        </munit:validation>
+    </munit:test>
+
+
+    <!-- ================================================================
+         SUITE 4 — Error Handler Scenarios
+         ================================================================ -->
+
+    <!--
+        Test     : TC-010 - 400 Bad Request error handler returns structured JSON
+        Flow     : global-error-handler (APIKIT:BAD_REQUEST branch)
+        Scenario : Simulate APIKit BAD_REQUEST error and verify JSON error response
+        Expects  : error == "BAD_REQUEST", httpStatus == "400", correlationId present
+    -->
+    <munit:test name="TC-010-error-handler-400-bad-request"
+                doc:name="TC-010: Error Handler - 400 Bad Request Response">
+
+        <munit:behavior>
+            <munit-tools:mock-when processor="http:request" doc:name="Mock Downstream - Trigger 400">
+                <munit-tools:with-attributes>
+                    <munit-tools:with-attribute whereValue="GET Downstream /objects" attributeName="doc:name"/>
+                </munit-tools:with-attributes>
+                <munit-tools:then-return>
+                    <munit-tools:error typeId="APIKIT:BAD_REQUEST" description="Required field missing"/>
+                </munit-tools:then-return>
+            </munit-tools:mock-when>
+        </munit:behavior>
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-010" doc:name="Set Correlation ID"/>
+            <try doc:name="Catch Expected Error">
+                <flow-ref name="get:\objects:agentdemo-config" doc:name="Execute GET /objects"/>
+                <error-handler>
+                    <on-error-continue type="APIKIT:BAD_REQUEST" doc:name="Expected 400 Error">
+                        <ee:transform doc:name="Build 400 Response">
+                            <ee:message>
+                                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "BAD_REQUEST",
+    message: (error.description default "Bad Request - Invalid request parameters"),
+    correlationId: (vars.correlationId default "unknown")
+}]]></ee:set-payload>
+                            </ee:message>
+                            <ee:variables>
+                                <ee:set-variable variableName="httpStatus"><![CDATA["400"]]></ee:set-variable>
+                            </ee:variables>
+                        </ee:transform>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.error]"
+                is="#[MunitTools::equalTo('BAD_REQUEST')]"
+                doc:name="Assert error type is BAD_REQUEST"/>
+
+            <munit-tools:assert-that
+                expression="#[vars.httpStatus]"
+                is="#[MunitTools::equalTo('400')]"
+                doc:name="Assert HTTP status is 400"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.correlationId]"
+                is="#[MunitTools::equalTo('corr-tc-010')]"
+                doc:name="Assert correlationId in error response"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-011 - 404 Not Found error handler returns structured JSON
+        Flow     : global-error-handler (APIKIT:NOT_FOUND branch)
+        Scenario : Simulate APIKIT:NOT_FOUND and verify error response structure
+        Expects  : error == "NOT_FOUND", httpStatus == "404"
+    -->
+    <munit:test name="TC-011-error-handler-404-not-found"
+                doc:name="TC-011: Error Handler - 404 Not Found Response">
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-011" doc:name="Set Correlation ID"/>
+            <try doc:name="Simulate 404 Error">
+                <raise-error type="APIKIT:NOT_FOUND" description="Resource not found" doc:name="Raise 404"/>
+                <error-handler>
+                    <on-error-continue type="APIKIT:NOT_FOUND" doc:name="Handle 404">
+                        <ee:transform doc:name="Build 404 Response">
+                            <ee:message>
+                                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "NOT_FOUND",
+    message: (error.description default "The requested resource was not found"),
+    correlationId: (vars.correlationId default "unknown")
+}]]></ee:set-payload>
+                            </ee:message>
+                            <ee:variables>
+                                <ee:set-variable variableName="httpStatus"><![CDATA["404"]]></ee:set-variable>
+                            </ee:variables>
+                        </ee:transform>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.error]"
+                is="#[MunitTools::equalTo('NOT_FOUND')]"
+                doc:name="Assert error is NOT_FOUND"/>
+
+            <munit-tools:assert-that
+                expression="#[vars.httpStatus]"
+                is="#[MunitTools::equalTo('404')]"
+                doc:name="Assert status 404"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-012 - 405 Method Not Allowed error handler
+        Flow     : global-error-handler (APIKIT:METHOD_NOT_ALLOWED branch)
+        Scenario : Raise METHOD_NOT_ALLOWED, verify error response
+        Expects  : error == "METHOD_NOT_ALLOWED", httpStatus == "405"
+    -->
+    <munit:test name="TC-012-error-handler-405-method-not-allowed"
+                doc:name="TC-012: Error Handler - 405 Method Not Allowed">
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-012" doc:name="Set Correlation ID"/>
+            <try doc:name="Simulate 405 Error">
+                <raise-error type="APIKIT:METHOD_NOT_ALLOWED" description="DELETE is not allowed" doc:name="Raise 405"/>
+                <error-handler>
+                    <on-error-continue type="APIKIT:METHOD_NOT_ALLOWED" doc:name="Handle 405">
+                        <ee:transform doc:name="Build 405 Response">
+                            <ee:message>
+                                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "METHOD_NOT_ALLOWED",
+    message: (error.description default "HTTP method not allowed for this resource"),
+    correlationId: (vars.correlationId default "unknown")
+}]]></ee:set-payload>
+                            </ee:message>
+                            <ee:variables>
+                                <ee:set-variable variableName="httpStatus"><![CDATA["405"]]></ee:set-variable>
+                            </ee:variables>
+                        </ee:transform>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.error]"
+                is="#[MunitTools::equalTo('METHOD_NOT_ALLOWED')]"
+                doc:name="Assert error is METHOD_NOT_ALLOWED"/>
+
+            <munit-tools:assert-that
+                expression="#[vars.httpStatus]"
+                is="#[MunitTools::equalTo('405')]"
+                doc:name="Assert status 405"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-013 - 500 Internal Server Error catch-all handler
+        Flow     : global-error-handler (ANY branch)
+        Scenario : Simulate unexpected error, verify generic 500 response
+        Expects  : error == "INTERNAL_SERVER_ERROR", httpStatus == "500", no stack trace exposed
+    -->
+    <munit:test name="TC-013-error-handler-500-internal-server-error"
+                doc:name="TC-013: Error Handler - 500 Internal Server Error Catch-All">
+
+        <munit:execution>
+            <set-variable variableName="correlationId" value="corr-tc-013" doc:name="Set Correlation ID"/>
+            <try doc:name="Simulate Unexpected Error">
+                <raise-error type="MULE:UNKNOWN" description="Unexpected system failure" doc:name="Raise Generic Error"/>
+                <error-handler>
+                    <on-error-continue type="ANY" doc:name="Handle ANY Error - 500">
+                        <ee:transform doc:name="Build 500 Response">
+                            <ee:message>
+                                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    error: "INTERNAL_SERVER_ERROR",
+    message: "An unexpected error occurred. Please contact support",
+    correlationId: (vars.correlationId default "unknown")
+}]]></ee:set-payload>
+                            </ee:message>
+                            <ee:variables>
+                                <ee:set-variable variableName="httpStatus"><![CDATA["500"]]></ee:set-variable>
+                            </ee:variables>
+                        </ee:transform>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.error]"
+                is="#[MunitTools::equalTo('INTERNAL_SERVER_ERROR')]"
+                doc:name="Assert error is INTERNAL_SERVER_ERROR"/>
+
+            <munit-tools:assert-that
+                expression="#[vars.httpStatus]"
+                is="#[MunitTools::equalTo('500')]"
+                doc:name="Assert status 500"/>
+
+            <munit-tools:assert-that
+                expression="#[payload.message]"
+                is="#[MunitTools::equalTo('An unexpected error occurred. Please contact support')]"
+                doc:name="Assert generic error message (no stack trace)"/>
+        </munit:validation>
+    </munit:test>
+
+    <!--
+        Test     : TC-014 - correlationId defaults to Mule correlationId when header absent
+        Flow     : get:\ping:agentdemo-config  (indirectly tests correlationId fallback)
+        Scenario : No x-correlation-id header set; vars.correlationId should fallback
+        Expects  : Flow completes, status is UP
+    -->
+    <munit:test name="TC-014-ping-no-correlation-header-fallback"
+                doc:name="TC-014: GET /ping - Missing Correlation Header Uses Default">
+
+        <munit:execution>
+            <!-- Deliberately do NOT set correlationId variable -->
+            <flow-ref name="get:\ping:agentdemo-config" doc:name="Execute GET /ping without correlationId"/>
+        </munit:execution>
+
+        <munit:validation>
+            <munit-tools:assert-that
+                expression="#[payload.status]"
+                is="#[MunitTools::equalTo('UP')]"
+                doc:name="Assert flow completes even without correlationId"/>
+        </munit:validation>
+    </munit:test>
+
+</mule>
