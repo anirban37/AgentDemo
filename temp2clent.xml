@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mcp="http://www.mulesoft.org/schema/mule/mcp" xmlns:ms-agentforce="http://www.mulesoft.org/schema/mule/ms-agentforce" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd  http://www.mulesoft.org/schema/mule/ms-agentforce http://www.mulesoft.org/schema/mule/ms-agentforce/current/mule-ms-agentforce.xsd  http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd  http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd  http://www.mulesoft.org/schema/mule/mcp http://www.mulesoft.org/schema/mule/mcp/current/mule-mcp.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd">
+    
+    <configuration-properties doc:name="Configuration properties" doc:id="0027d39c-6481-461f-9029-13ca977c98bf" file="dev.properties" />
+    
+    <http:listener-config name="Listener-config">
+        <http:listener-connection host="0.0.0.0" port="8081"></http:listener-connection>
+    </http:listener-config>
+    
+     <!-- This is for MCP tools node js app with http stream -->	
+     <mcp:client-config clientName="mcp_client" clientVersion="1.0.0" name="MCPClient">
+		<mcp:streamable-http-client-connection serverUrl="https://user-lookup-server-czif7s.ga8jrk.usa-e1.cloudhub.io/" />
+    </mcp:client-config>
+ 
+
+<!--
+ <mcp:client-config clientName="mcp_client" clientVersion="1.0.0" name="MCPClient">
+	 <mcp:sse-client-connection 
+        serverUrl="https://user-lookup-server-czif7s.ga8jrk.usa-e1.cloudhub.io"
+        sseEndpointPath="/sse"
+        requestTimeout="120"
+        requestTimeoutUnit="SECONDS"
+        reconnectionDelay="1000"
+        reconnectionDelayUnit="MILLISECONDS">
+        <mcp:default-request-headers>
+            <mcp:default-request-header key="Accept" value="text/event-stream"/>
+            <mcp:default-request-header key="Cache-Control" value="no-cache"/>
+        </mcp:default-request-headers>
+    </mcp:sse-client-connection>
+     </mcp:client-config>
+	 -->
+	 
+	 
+<!-- <mcp:client-config clientName="mcp_client" clientVersion="1.0.0" name="MCPClient">
+    <mcp:sse-client-connection 
+        serverUrl="https://user-lookup-server-czif7s.ga8jrk.usa-e1.cloudhub.io"
+        sseEndpointPath="/sse"
+        requestTimeout="300"
+        requestTimeoutUnit="SECONDS"
+        reconnectionDelay="2000"
+        reconnectionDelayUnit="MILLISECONDS">
+        <reconnection failsDeployment="false">
+            <reconnect frequency="3000" count="3"/>
+        </reconnection>
+        <mcp:default-request-headers>
+            <mcp:default-request-header key="Accept" value="text/event-stream"/>
+            <mcp:default-request-header key="Cache-Control" value="no-cache"/>
+            <mcp:default-request-header key="Connection" value="keep-alive"/>
+        </mcp:default-request-headers>
+    </mcp:sse-client-connection>
+</mcp:client-config> -->
+
+
+
+
+
+
+    <api-gateway:autodiscovery apiId="${instanceid}" ignoreBasePath="true" doc:name="API Autodiscovery" doc:id="8d2d375c-b05c-4410-a14d-bf169414ac33" flowRef="read-rules-flow" />
+	
+	<flow name="read-user-flow">
+        <http:listener config-ref="Listener-config" doc:id="65d888ee-9943-473c-a412-3ee61911f5ba" doc:name="Listener" path="/read/{name}"></http:listener>
+        <!-- Extract name from URI parameter -->
+        <set-variable doc:id="f7a966b6-af5a-4b23-9cce-e80ee46cd68d" doc:name="Set name variable" value="#[attributes.uriParams.name]" variableName="userName"></set-variable>
+        <set-variable doc:id="1da97f6e-97b8-4890-9cf9-9842b9404c21" doc:name="Set name variable" value="#[payload]" variableName="jsonData"></set-variable>
+        <!-- Log the request -->
+        <logger doc:id="3766f176-240a-4804-84e2-84b203146237" doc:name="Log Request" level="INFO" message="Looking up user: #[vars.userName]"></logger>
+        <ee:transform doc:name="Prepare MCP Arguments">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "userName": vars.userName
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+        <mcp:call-tool config-ref="MCPClient" doc:id="a38579b8-b422-42e5-b6ec-a582ea82af5a" doc:name="MCP Client - Call Tool" toolName="user-lookup"></mcp:call-tool>
+		
+		  <ee:transform doc:name="Transform" doc:id="58b87fb8-3b46-47c6-b313-e329a739425c" >
+            <ee:message >
+                <ee:set-payload doc:name="Set payload" doc:id="53d12d44-2a2f-4bec-93b9-8e31f4ede757" ><![CDATA[%dw 2.0
+        output application/json
+        ---
+       read(payload.contents[0].text, "application/json")]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+		<set-variable value="application/json" doc:name="Set Content Type" variableName="contentType"/>
+        <!-- Log the final response -->
+        <logger doc:id="07081917-97c6-461a-89a0-f994eade0126" doc:name="Log Final Response" level="INFO" message="Final Response: #[payload]"></logger>
+    </flow>
+
+
+
+
+<!-- rule -->
+
+
+
+
+ <flow name="read-rules-flow">
+      <http:listener config-ref="Listener-config" path="/getrules" doc:name="Get Rules HTTP Endpoint"/>
+    
+    <logger doc:name="Log HTTP Request" level="INFO" message="HTTP getrules called with query params: #[attributes.queryParams]"/>
+    
+    <!-- Prepare arguments as Map -->
+    <ee:transform doc:name="Prepare MCP Arguments">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+    "category": attributes.queryParams.category default attributes.queryParams.category default null
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <!-- Call MCP Client Tool -->
+    <mcp:call-tool config-ref="MCPClient" toolName="rule-lookup" doc:name="Call MCP Rule Lookup Tool">
+        <mcp:arguments>#[payload]</mcp:arguments>
+    </mcp:call-tool>
+    
+    <!-- Parse MCP response and format according to HTTP endpoint requirements -->
+    <ee:transform doc:name="Format HTTP Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+do {
+    var mcpResponse = read(payload.contents[0].text, "application/json")
+    ---
+    if (mcpResponse.status == "success") {
+        "status": "success",
+        "processedAt": now(),
+        "total rules fetched": sizeOf(mcpResponse.result),
+        "result": mcpResponse.result
+    } else {
+        "status": "error",
+        "processedAt": now(),
+        "total rules fetched": 0,
+        "error": "rule not found via HTTP endpoint",
+        "result": []
+    }
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <logger doc:name="Log HTTP Response" level="INFO" message="HTTP Response returned"/>
+</flow>
+
+
+
+
+
+
+
+<!-- ========================================== -->
+<!-- ESTIMATION STANDARDS MCP CLIENT FLOWS     -->
+<!-- Add these flows to user-lookup.xml        -->
+<!-- Place at the END of the file before </mule> -->
+<!-- ========================================== -->
+
+<!-- Main Endpoint: Query with Optional Filters -->
+<flow name="get-estimation-standards-flow" doc:id="8a77b711-7b5f-4c3b-a51f-c127f45297af">
+    <http:listener config-ref="Listener-config" 
+                   path="/estimation-standards" 
+                   doc:name="Get Estimation Standards HTTP Endpoint"/>
+    
+    <logger doc:name="Log HTTP Request" 
+            level="INFO" 
+            message="HTTP /estimation-standards called with query params: #[attributes.queryParams]"/>
+    
+    <!-- Prepare arguments as Map for MCP Tool - ALL FILTERS ARE OPTIONAL -->
+    <ee:transform doc:name="Prepare MCP Arguments (Optional Filters)">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+    // Only include parameters if they are provided in query string
+    (complexity: attributes.queryParams.complexity) if (attributes.queryParams.complexity != null and attributes.queryParams.complexity != ""),
+    (category: attributes.queryParams.category) if (attributes.queryParams.category != null and attributes.queryParams.category != ""),
+    (minEffortDays: attributes.queryParams.minEffortDays as Number) if (attributes.queryParams.minEffortDays != null and attributes.queryParams.minEffortDays != ""),
+    (maxEffortDays: attributes.queryParams.maxEffortDays as Number) if (attributes.queryParams.maxEffortDays != null and attributes.queryParams.maxEffortDays != "")
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <logger doc:name="Log MCP Arguments" 
+            level="INFO" 
+            message="Calling MCP tool with filters: #[payload]"/>
+    
+    <!-- Call MCP Client Tool -->
+    <mcp:call-tool config-ref="MCPClient" 
+                   toolName="estimation-standards-lookup" 
+                   doc:name="Call MCP Estimation Standards Lookup Tool">
+        <mcp:arguments>#[payload]</mcp:arguments>
+    </mcp:call-tool>
+    
+    <!-- Parse MCP response and format according to HTTP endpoint requirements -->
+    <ee:transform doc:name="Format HTTP Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+do {
+    var mcpResponse = read(payload.contents[0].text, "application/json")
+    ---
+    if (mcpResponse.status == "success") {
+        status: "success",
+        processedAt: now(),
+        source: "MCP Tool via estimation-standards-lookup",
+        totalStandards: mcpResponse.totalStandards,
+        appliedFilters: mcpResponse.filters,
+        standards: mcpResponse.standards
+    } else if (mcpResponse.status == "no_results") {
+        status: "no_results",
+        processedAt: now(),
+        source: "MCP Tool via estimation-standards-lookup",
+        totalStandards: 0,
+        appliedFilters: mcpResponse.filters,
+        message: "No estimation standards found matching the provided filters",
+        standards: []
+    } else {
+        status: "error",
+        processedAt: now(),
+        source: "MCP Tool via estimation-standards-lookup",
+        totalStandards: 0,
+        error: "Estimation standards not found via HTTP endpoint",
+        standards: []
+    }
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <logger doc:name="Log HTTP Response" 
+            level="INFO" 
+            message="HTTP Response returned: #[payload.totalStandards] standards with filters: #[payload.appliedFilters]"/>
+</flow>
+
+
+<!-- Alternative Endpoint: Simple GET by Complexity (URI Parameter) -->
+<flow name="get-estimation-by-complexity-flow" doc:id="e98f170d-dcc0-4364-b76c-b2e45333f4dc">
+    <http:listener config-ref="Listener-config" 
+                   path="/estimation-standards/{complexity}" 
+                   doc:name="Get Standards by Complexity Endpoint"/>
+    
+    <logger doc:name="Log Request" 
+            level="INFO" 
+            message="Fetching estimation standards for complexity: #[attributes.uriParams.complexity]"/>
+    
+    <!-- Prepare MCP arguments with URI parameter -->
+    <ee:transform doc:name="Prepare MCP Arguments">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+    complexity: attributes.uriParams.complexity
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <!-- Call MCP Tool -->
+    <mcp:call-tool config-ref="MCPClient" 
+                   toolName="estimation-standards-lookup" 
+                   doc:name="Call MCP Tool">
+        <mcp:arguments>#[payload]</mcp:arguments>
+    </mcp:call-tool>
+    
+    <!-- Format response -->
+    <ee:transform doc:name="Format Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+read(payload.contents[0].text, "application/json")]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <logger doc:name="Log Response" 
+            level="INFO" 
+            message="Response: #[payload.totalStandards] standards returned"/>
+</flow>
+
+
+
+
+
+<flow name="get-doc-rules-flow">
+    <http:listener config-ref="Listener-config" path="/getdocrules" doc:name="Get Doc Rules HTTP Endpoint"/>
+
+    <logger doc:name="Log HTTP Request" level="INFO" message="HTTP /getdocrules called with query params: #[attributes.queryParams]"/>
+
+    <ee:transform doc:name="Prepare MCP Arguments">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+    (category: attributes.queryParams.category) if (attributes.queryParams.category != null and attributes.queryParams.category != ""),
+    (type: attributes.queryParams.type)         if (attributes.queryParams.type != null and attributes.queryParams.type != "")
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+    <mcp:call-tool config-ref="MCPClient" toolName="doc-rule-lookup" doc:name="Call MCP Doc Rule Lookup Tool">
+        <mcp:arguments>#[payload]</mcp:arguments>
+    </mcp:call-tool>
+
+    <ee:transform doc:name="Format HTTP Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+do {
+    var mcpResponse = read(payload.contents[0].text, "application/json")
+    ---
+    if (mcpResponse.status == "success") {
+        "status":             "success",
+        "processedAt":        now(),
+        "totalRulesFetched":  sizeOf(mcpResponse.result),
+        "result":             mcpResponse.result
+    } else {
+        "status":             "error",
+        "processedAt":        now(),
+        "totalRulesFetched":  0,
+        "error":              "No document rules found via HTTP endpoint",
+        "result":             []
+    }
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+    <logger doc:name="Log HTTP Response" level="INFO" message="Doc Rules HTTP Response returned"/>
+</flow>
+
+</mule>
