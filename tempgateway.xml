@@ -1,0 +1,906 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:sockets="http://www.mulesoft.org/schema/mule/sockets" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sockets http://www.mulesoft.org/schema/mule/sockets/current/mule-sockets.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<configuration-properties doc:name="Configuration properties" doc:id="17672eeb-1acc-465e-fc20-e99467edd179" file="${envNameParam}.properties" />
+	
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="9492b9a5-ccea-431e-a9c6-dcec37241bf9" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+		
+	<!-- in properties file listener.docrules.path=/getdocrules-proxy -->
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="6cb9ed60-c394-4a74-b394-dfc24de45cc7" responseTimeout="${http.timeout}">
+		<http:request-connection 
+			protocol="HTTPS" 
+			host="${quasarmarket.http.host}" 
+			port="${quasarmarket.http.port}"
+			streamResponse="true"
+			responseBufferSize="131072"
+			usePersistentConnections="true"
+			maxConnections="50"
+			connectionIdleTimeout="${http.timeout}">
+			<http:client-socket-properties>
+				<sockets:tcp-client-socket-properties 
+					sendBufferSize="65536"
+					receiveBufferSize="65536"
+					clientTimeout="${http.socket.timeout}"
+					sendTcpNoDelay="true"
+					linger="0"
+					keepAlive="true" />
+			</http:client-socket-properties>
+		</http:request-connection>
+	</http:request-config>
+	
+	
+	<!-- HTTP Request Configuration for AI API (Non-Streaming) -->
+	<http:request-config name="HTTP_Request_configuration_nonstream" doc:name="HTTP Request configuration Non-Stream" doc:id="83eb3842-a19b-4ba3-8994-20133b2971e3">
+		<http:request-connection 
+			protocol="HTTPS" 
+			host="${quasarmarket.http.host}" 
+			port="${quasarmarket.http.port}"
+			streamResponse="false"
+			usePersistentConnections="true"
+			maxConnections="50"
+			connectionIdleTimeout="${http.timeout}">
+			<http:client-socket-properties>
+				<sockets:tcp-client-socket-properties 
+					sendBufferSize="65536"
+					receiveBufferSize="65536"
+					clientTimeout="${http.socket.timeout}"
+					sendTcpNoDelay="true"
+					linger="0"
+					keepAlive="true" />
+			</http:client-socket-properties>
+		</http:request-connection>
+	</http:request-config>
+	
+	<http:request-config name="HTTP_Request_Rules" doc:name="HTTP Request configuration" doc:id="cd0d240d-551b-451f-8d13-d79d6a7d34d9" >
+		<http:request-connection protocol="HTTPS" host="${rules.host}" port="${quasarmarket.http.port}" usePersistentConnections="true"
+			maxConnections="50"
+			connectionIdleTimeout="${http.timeout}"/>
+	</http:request-config>
+	
+	
+	<os:object-store 
+    name="Rules_Cache_Object_Store" 
+    doc:name="Object store" 
+    doc:id="6f17a757-2c86-4200-b85e-6eb2ef357add"
+    persistent="false"
+    maxEntries="1000"
+    entryTtl="${cache.ttl.seconds}"
+    entryTtlUnit="SECONDS"
+    expirationInterval="${cache.expiration.interval.seconds}"
+    expirationIntervalUnit="SECONDS"/>
+	
+	
+	<os:object-store 
+    name="Doc_Rules_Cache_Object_Store" 
+    doc:name="Doc Rules Object store" 
+    doc:id="doc-rules-object-store-01"
+    persistent="false"
+    maxEntries="1000"
+    entryTtl="${cache.ttl.seconds}"
+    entryTtlUnit="SECONDS"
+    expirationInterval="${cache.expiration.interval.seconds}"
+    expirationIntervalUnit="SECONDS"/>
+	
+	
+	<!-- ========================================== -->
+	<!-- FLOW 1: STREAMING ENDPOINT                 -->
+	<!-- ========================================== -->
+	<flow name="mule-mcp-appgatewayFlow" doc:id="91fcd362-b7c8-4c41-9354-1fbe111750b7" >
+		<http:listener 
+			doc:name="Listener" 
+			doc:id="9fb800d1-98e9-4d3b-8cb8-950a0e2706e3" 
+			config-ref="HTTP_Listener_config" 
+			path="${listener.stream.path}">
+			<non-repeatable-stream />
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers>#[vars.responseHeaders default {}]</http:headers>
+			</http:response>
+			<http:error-response statusCode="#[vars.httpStatus default 500]">
+				<http:headers>#[vars.responseHeaders default {}]</http:headers>
+			</http:error-response>
+		</http:listener>
+		<logger 
+	level="INFO" 
+	doc:name="Entry-log" 
+	doc:id="4d1a2775-dd71-4423-b34b-d18084ff91ad" 
+	message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [RequestID: " ++ correlationId ++ "] Gateway Started | Remote IP: " ++ attributes.remoteAddress ++ " *********************************** "]'/>
+
+		<http:request method="POST" doc:name="Request" doc:id="4463d6dd-e553-440f-a7a8-c8d6a0497dbc" path="${http.path}" config-ref="HTTP_Request_configuration" 
+		requestStreamingMode="AUTO"
+			sendBodyMode="ALWAYS" responseTimeout="${http.timeout}">
+			<non-repeatable-stream />
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"X-API-KEY" : attributes.headers."X-API-KEY"
+}]]]></http:headers>
+		</http:request>
+		
+		<!-- Capture response headers and status -->
+		<set-variable 
+			value="#[attributes.headers]" 
+			doc:name="Store Response Headers" 
+			doc:id="07fadadc-ebca-4365-9382-127fa1d03004" 
+			variableName="responseHeaders"/>
+		<set-variable 
+			value="#[attributes.statusCode]" 
+			doc:name="Store Status Code" 
+			doc:id="c55524b7-0928-4c5e-adec-4ec186588686" 
+			variableName="httpStatus"/>
+		
+		<!-- Reference global error handler -->
+		<error-handler ref="ai-api-proxy-error-handler" doc:name="Reference Global Error Handler" doc:id="96d35cb2-58ea-44a8-9fba-ac7cc292a919"/>
+	</flow>
+	
+	
+	
+	<!-- ========================================== -->
+	<!-- FLOW 2: NON-STREAMING ENDPOINT             -->
+	<!-- ========================================== -->
+	<flow name="mule-mcp-appgatewayFlow-nonstream" doc:id="f17bf4fb-6671-4c83-92c5-21de1ba2b499" maxConcurrency="50">
+		<http:listener 
+			doc:name="Listener Non-Stream" 
+			doc:id="d6dd9c8f-4d0b-4163-9016-a2b51636fd97" 
+			config-ref="HTTP_Listener_config" 
+			path="${listener.nostream.path}">
+			<http:response statusCode="#[vars.httpStatus default 200]">
+				<http:headers>#[vars.responseHeaders default {}]</http:headers>
+			</http:response>
+			<http:error-response statusCode="#[vars.httpStatus default 500]">
+				<http:headers>#[vars.responseHeaders default {}]</http:headers>
+			</http:error-response>
+		</http:listener>
+		
+		<logger 
+			level="INFO" 
+			doc:name="Entry-log Non-Stream" 
+			doc:id="14687be2-c9fb-4a2b-b70f-1aca0391c816" 
+			message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [RequestID: " ++ correlationId ++ "] Gateway Started (NON-STREAMING) | Remote IP: " ++ attributes.remoteAddress ++ " *********************************** "]'/>
+
+		<http:request 
+			method="POST" 
+			doc:name="Request Non-Stream" 
+			doc:id="215244f5-108c-48f4-b100-11873c5106ce" 
+			path="${http.path}" 
+			config-ref="HTTP_Request_configuration_nonstream" 
+			sendBodyMode="ALWAYS" 
+			responseTimeout="${http.timeout}">
+			<http:headers><![CDATA[#[output application/java
+---
+{
+	"X-API-KEY" : attributes.headers."x-api-key"
+}]]]></http:headers>
+		</http:request>
+		
+		<!-- Capture response headers and status -->
+		<set-variable 
+			value="#[attributes.headers]" 
+			doc:name="Store Response Headers" 
+			doc:id="bf307f98-4855-46ba-b4b9-b668794eedb9" 
+			variableName="responseHeaders"/>
+		<set-variable 
+			value="#[attributes.statusCode]" 
+			doc:name="Store Status Code" 
+			doc:id="ce80836e-4897-4481-ac58-b0bd8a2eab43" 
+			variableName="httpStatus"/>
+		
+		<!-- Reference global error handler -->
+		<error-handler ref="ai-api-proxy-error-handler" doc:name="Reference Global Error Handler" doc:id="3be04e65-b10c-4550-ac7f-c0de48f7db75"/>
+	</flow>
+	
+	<flow name="mule-mcp-appgatewayRules" doc:id="a267f976-ed89-4df3-aaf5-5003ad97e1ae" >
+    <http:listener 
+        doc:name="Listener Non-Stream" 
+        doc:id="38d88219-bed3-4e7f-ae99-494e6f7d867e" 
+        config-ref="HTTP_Listener_config" 
+        path="${listener.rules.path}">
+       <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[(vars.responseHeaders default {}) ++ (if (vars.cacheHit default false) {'X-Cache': 'Cached'} else {})]</http:headers>
+        </http:response>
+        <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:headers>#[(vars.responseHeaders default {}) ++ (if (vars.cacheHit default false) {'X-Cache': 'Cached'} else {})]</http:headers>
+         </http:error-response>
+          </http:listener>
+    
+    <logger 
+        level="INFO" 
+        doc:name="Entry-log Non-Stream" 
+        doc:id="4c3c307a-8186-4318-8e25-b9fd646fdf32" 
+        message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [RULES ENDPOINT RequestID: " ++ correlationId ++ "] Gateway Started | Remote IP: " ++ attributes.remoteAddress ++ " | Category: " ++ (attributes.queryParams.category default "ALL") ++ " ***********************************"]'/>
+    
+    <!-- Extract credentials from headers -->
+    <set-variable 
+        value="#[attributes.headers.username default null]" 
+        doc:name="Extract Username from Header" 
+        doc:id="b9d5487a-aa83-4350-a929-12122ee47496" 
+        variableName="authUsername"/>
+    
+    <set-variable 
+        value="#[attributes.headers.password default null]" 
+        doc:name="Extract Password from Header" 
+        doc:id="aadec7fa-6ee6-4216-9fb4-d0cd09469204" 
+        variableName="authPassword"/>
+    
+    <!-- Extract or construct Authorization header -->
+    <set-variable 
+        value='#[attributes.headers.authorization default attributes.headers.Authorization default null]' 
+        doc:name="Get Authorization Header" 
+        doc:id="d4cfac2c-1357-4bd1-85c6-8c8b40cfd0d6" 
+        variableName="authorizationHeader"/>
+    
+    <!-- If no Authorization header but username/password present, construct Basic Auth header -->
+    <choice doc:name="Construct Auth Header if Needed" doc:id="83a2b3cd-6984-46b5-95fb-27c741efcb0e">
+        <when expression="#[vars.authorizationHeader == null and vars.authUsername != null and vars.authPassword != null]">
+            <ee:transform doc:name="Create Basic Auth Header" doc:id="e487a967-6761-4ef6-a7b3-9ff46eaca71e">
+                <ee:message>
+                </ee:message>
+                <ee:variables>
+                    <ee:set-variable variableName="authorizationHeader"><![CDATA[%dw 2.0
+import * from dw::core::Binaries
+output application/java
+var credentials = vars.authUsername ++ ":" ++ vars.authPassword
+var base64Encoded = toBase64(credentials)
+---
+"Basic " ++ base64Encoded]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </when>
+    </choice>
+    
+    <logger 
+        level="INFO" 
+        doc:name="Log Auth Method" 
+        doc:id="ab4de8e3-5b81-4db1-a739-2717bbc9a3b7" 
+        message='#["Authentication header prepared | Auth present: " ++ (vars.authorizationHeader != null)]'/>
+    
+   <!-- Generate cache key based on query parameters -->
+    <set-variable 
+        value='#["rules_ " ++ (attributes.queryParams.category default "all") replace ", " with ","]' 
+        doc:name="Set Cache Key" 
+        doc:id="d0b3d415-f54f-4568-a641-56055d602f3e" 
+        variableName="cacheKey"/>
+    
+    <!-- Initialize cache hit flag -->
+    <set-variable 
+        value="#[false]" 
+        doc:name="Set Cache Hit Flag" 
+        doc:id="1918a2dd-c5b0-42af-b5bb-91f4d8036400"
+        variableName="cacheHit"/>
+    
+    <logger 
+        level="INFO" 
+        doc:name="Log Cache Lookup Start" 
+        doc:id="38c32318-2d55-4fe4-a5f6-87d87702361b" 
+        message='#[">>> Checking cache for key: " ++ vars.cacheKey]'/>
+    
+    <!-- Try to retrieve from cache -->
+    <try doc:name="Try" doc:id="89e7af12-82d6-4c3f-b216-475db5660faf">
+        <os:retrieve 
+            doc:name="Retrieve from Cache" 
+            doc:id="78709aa4-7677-424f-aa11-d8d1b8d0828c"
+            key="#[vars.cacheKey]" 
+            objectStore="Rules_Cache_Object_Store"
+            target="cachedResponse"/>
+        
+        <!-- If we reach here, cache was found -->
+        <set-variable 
+            value="#[true]" 
+            doc:name="Mark Cache Hit" 
+            doc:id="ce38634b-094f-4768-baea-271be9ca5dc7"
+            variableName="cacheHit"/>
+                
+        <logger 
+            level="INFO" 
+            doc:name="CACHE HIT" 
+            doc:id="32fb320e-d611-4500-915b-b21703438097"
+            message='#["*** CACHE HIT *** Key: " ++ vars.cacheKey ++ " | Returning cached response"]'/>
+        
+        <set-payload 
+            value="#[vars.cachedResponse.payload]" 
+            doc:name="Set Cached Payload" 
+            doc:id="20011f9d-ae62-4333-8598-5a5bad535853"
+            mimeType="application/json"/>
+        
+        <set-variable 
+            value="#[vars.cachedResponse.headers]" 
+            doc:name="Set Cached Headers" 
+            doc:id="2aaf3f35-800b-49df-bcab-52e1e280495a"
+            variableName="responseHeaders"/>
+        
+        <set-variable 
+            value="#[vars.cachedResponse.statusCode]" 
+            doc:name="Set Cached Status" 
+            doc:id="596e189e-4dac-4c14-905b-b83ed71659e1"
+            variableName="httpStatus"/>
+        
+        <error-handler>
+            <on-error-continue 
+                enableNotifications="true" 
+                logException="false" 
+                doc:name="On Error Continue" 
+                doc:id="68c58272-6033-471d-a9d9-3b5c4c6cd771"
+                type="OS:KEY_NOT_FOUND">
+                
+                <logger 
+                    level="INFO" 
+                    doc:name="CACHE MISS" 
+                    doc:id="a3695b6f-4e10-4ff4-a208-10ee92a26c42"
+                    message='#["*** CACHE MISS *** Key: " ++ vars.cacheKey ++ " | Fetching from backend API"]'/>
+                
+                <http:request 
+                    method="GET" 
+                    doc:name="Request-Rules from Backend" 
+                    doc:id="f1f7dee3-79f2-42d4-914d-73fdc9eaacf7" 
+                    path="/getrules" 
+                    sendBodyMode="ALWAYS" 
+                    responseTimeout="${http.timeout}" 
+                    config-ref="HTTP_Request_Rules">
+                    <http:headers><![CDATA[#[output application/java
+---
+{
+    "Authorization": vars.authorizationHeader
+}]]]></http:headers>
+                    <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
+                </http:request>
+                
+				<ee:transform doc:name="Response Lite" doc:id="7f1a39c4-6bf5-40d8-9733-3855180d9eaf" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	
+ "status": payload.status,
+  "processedAt": payload.processedAt,
+  "total rules fetched": payload."total rules fetched",
+   result: payload.result map {
+	  "rule-id": $."rule-id",
+	  "action": $.action,
+      "rule-name": $."rule-name",
+      "severity": $.severity,
+      "category": $.category,
+      "target-files": $."target-files",
+      "business-rule": $."business-rule"
+	}
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			
+			
+                <logger 
+                    level="INFO" 
+                    doc:name="Backend Response Received" 
+                    doc:id="337eae03-74ce-4f9f-880a-a86b0fce5e17"
+                    message='#["Backend API responded | Status: " ++ attributes.statusCode]'/>
+                
+                <!-- Store the response data -->
+                <set-variable 
+                    value="#[attributes.headers]" 
+                    doc:name="Store Response Headers" 
+                    doc:id="5fe5fa07-c247-428e-ad46-33ad72bde35e" 
+                    variableName="responseHeaders"/>
+                
+                <set-variable 
+                    value="#[attributes.statusCode]" 
+                    doc:name="Store Status Code" 
+                    doc:id="62535bbb-ab4b-434b-a0d8-b8baf3eb9f25" 
+                    variableName="httpStatus"/>
+                
+                 <set-variable value="#[payload]" doc:name="Store Payload as String" doc:id="350dd458-330b-472f-bee0-004d4869b1d9" variableName="responsePayload" />
+                
+                
+                <!-- Cache the response -->
+                <os:store 
+                    doc:name="Store in Cache" 
+                    doc:id="ddeafa40-3996-4223-b79b-754f495699bb"
+                    key="#[vars.cacheKey]" 
+                    objectStore="Rules_Cache_Object_Store"
+                    failIfPresent="false"
+                    failOnNullValue="false">
+                    <os:value><![CDATA[#[output application/java --- {
+                        payload: write(vars.responsePayload, 'application/json'),
+                        headers: vars.responseHeaders,
+                        statusCode: vars.httpStatus,
+                        cachedAt: now() as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSS"}
+                    }]]]></os:value>
+                </os:store>
+                
+                <logger 
+                    level="INFO" 
+                    doc:name="Response Cached Successfully" 
+                    doc:id="aca42537-2809-4155-bf50-e14924e71055"
+                    message='#["*** CACHED *** Key: " ++ vars.cacheKey ++ " | TTL: " ++ p("cache.ttl.seconds") ++ " seconds"]'/>
+                
+                <!-- Restore payload for response -->
+                <set-payload 
+                    value="#[vars.responsePayload]" 
+                    doc:name="Restore Payload" 
+                    doc:id="cad21fdc-1fd3-46bb-a837-50505c9344f4"
+                    mimeType="application/json"/>
+            </on-error-continue>
+            
+            <on-error-continue 
+                enableNotifications="true" 
+                logException="true" 
+                doc:name="On Any Other Error" 
+                doc:id="fb8ec7c0-a752-44e7-b235-b945f68dfd00"
+                type="ANY">
+                
+                <logger 
+                    level="ERROR" 
+                    doc:name="Cache Error - Fallback to Backend" 
+                    doc:id="ad398616-fe77-4492-a37e-6b4997fa6638"
+                    message='#["*** CACHE ERROR *** " ++ error.description ++ " | Falling back to backend API"]'/>
+                
+                <http:request 
+                    method="GET" 
+                    doc:name="Request-Rules Fallback" 
+                    doc:id="ad64882c-6230-4290-9ffd-57f4445ef2b5" 
+                    path="/getrules" 
+                    sendBodyMode="ALWAYS" 
+                    responseTimeout="${http.timeout}" 
+                    config-ref="HTTP_Request_Rules">
+                    <http:headers><![CDATA[#[output application/java
+---
+{
+    "Authorization": vars.authorizationHeader
+}]]]></http:headers>
+                    <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
+                </http:request>
+                
+                <set-variable 
+                    value="#[attributes.headers]" 
+                    doc:name="Store Response Headers" 
+                    doc:id="8e7933d9-ae3e-457f-8c1c-590186f03ad5" 
+                    variableName="responseHeaders"/>
+                
+                <set-variable 
+                    value="#[attributes.statusCode]" 
+                    doc:name="Store Status Code" 
+                    doc:id="3ee9339c-b816-4057-991d-18f71864b7eb" 
+                    variableName="httpStatus"/>
+            </on-error-continue>
+        </error-handler>
+    </try>
+    
+    <logger 
+        level="INFO" 
+        doc:name="Final Response Log" 
+        doc:id="62d41f66-62ee-4af6-baae-feb32306c856"
+        message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [RULES ENDPOINT RequestID: " ++ correlationId ++ "] Completed | Cache Hit: " ++ vars.cacheHit ++ " | Status: " ++ vars.httpStatus ++ " ***********************************"]'/>
+    
+    <!-- Reference global error handler -->
+    <error-handler ref="ai-api-proxy-error-handler" doc:name="Reference Global Error Handler" doc:id="f5d95c45-7339-4390-b1a0-542f1637b527"/>
+</flow>
+
+
+<!-- Cache Invalidation Flow -->
+<flow name="mule-mcp-invalidateCache" doc:id="78cf8d68-8ca8-4fc0-9b5a-ec5760493926">
+    <http:listener 
+        doc:name="Listener Invalidate" 
+        doc:id="709bec14-ab2e-42a4-ab6c-931f665f6ebf" 
+        config-ref="HTTP_Listener_config" 
+        path="${listener.invalidate.path}"
+        allowedMethods="POST,DELETE">
+        <http:response statusCode="#[vars.httpStatus default 200]">
+            <http:body><![CDATA[#[output application/json --- vars.responseMessage]]]></http:body>
+        </http:response>
+    </http:listener>
+    
+    <logger 
+        level="INFO" 
+        doc:name="Invalidation Request Log" 
+        doc:id="d5af035c-20fa-4c66-90a0-c858acfa2492"
+        message='#["*** CACHE INVALIDATION REQUEST *** | Query Params: " ++ write(attributes.queryParams, "application/json")]'/>
+    
+    <choice doc:name="Invalidate Specific or All?" doc:id="dfe9249a-f441-4157-a6cd-22f0a8401b37">
+        <when expression="#[attributes.queryParams.category != null and attributes.queryParams.category != '']">
+            <!-- Invalidate specific cache key -->
+            <set-variable 
+                value='#["rules_ " ++ attributes.queryParams.category]' 
+                doc:name="Set Specific Cache Key" 
+                doc:id="e3081d0c-7dd4-42fc-9154-4f8ac2bf39e4" 
+                variableName="cacheKey"/>
+            
+            <try doc:name="Try Remove" doc:id="fb6a22f9-1de1-45a2-a7eb-123b8f4d4fb1">
+                <os:remove 
+                    doc:name="Remove Specific Cache Entry" 
+                    doc:id="b851175f-e1b0-443d-a98a-f039943661b7"
+                    key="#[vars.cacheKey]" 
+                    objectStore="Rules_Cache_Object_Store"/>
+                
+                <set-variable 
+                    value='#[output application/java --- {
+                        message: "Cache invalidated for category: " ++ attributes.queryParams.category, 
+                        key: vars.cacheKey,
+                        timestamp: now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+                    }]' 
+                    doc:name="Set Success Message" 
+                    doc:id="1281eee1-50e5-4904-abc6-c78b67e573de"
+                    variableName="responseMessage"/>
+                
+                <logger 
+                    level="INFO" 
+                    doc:name="Specific Cache Invalidated" 
+                    doc:id="5ef09aab-1408-433b-95d8-12ee6da48aae"
+                    message='#["*** INVALIDATED *** Key: " ++ vars.cacheKey]'/>
+                
+                <error-handler>
+                    <on-error-continue 
+                        enableNotifications="true" 
+                        logException="false" 
+                        doc:name="On Error Continue" 
+                        doc:id="d807d55b-dd19-406d-b1aa-51fc258adf6d"
+                        type="OS:KEY_NOT_FOUND">
+                        <set-variable 
+                            value='#[output application/java --- {
+                                message: "Cache key not found (already expired or never existed)", 
+                                key: vars.cacheKey,
+                                timestamp: now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+                            }]' 
+                            doc:name="Set Key Not Found Message" 
+                            doc:id="ad753321-503c-4353-a510-43cc295811a2"
+                            variableName="responseMessage"/>
+                        
+                        <logger 
+                            level="WARN" 
+                            doc:name="Key Not Found" 
+                            doc:id="f1f4a01c-365b-4a24-8288-48ab8a0dcb61"
+                            message='#["*** KEY NOT FOUND *** Key: " ++ vars.cacheKey ++ " (already expired or never cached)"]'/>
+                    </on-error-continue>
+                </error-handler>
+            </try>
+        </when>
+        <otherwise>
+            <!-- Clear entire cache -->
+            <os:clear 
+                doc:name="Clear All Cache" 
+                doc:id="d5b11f66-6f7d-4a28-8baa-19b8bd6cb39f"
+                objectStore="Rules_Cache_Object_Store"/>
+            
+            <set-variable 
+                value='#[output application/java --- {
+                    message: "All cache entries invalidated", 
+                    count: "all",
+                    timestamp: now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+                }]' 
+                doc:name="Set Clear All Message" 
+                doc:id="d7069ada-fc5a-49b8-b9b1-ebc81d38efd7"
+                variableName="responseMessage"/>
+            
+            <logger 
+                level="INFO" 
+                doc:name="All Cache Cleared" 
+                doc:id="7b5f1d06-d1a4-405b-b480-5622d3bdce48"
+                message='#["*** ALL CACHE CLEARED *** All entries invalidated successfully"]'/>
+        </otherwise>
+    </choice>
+    
+    <set-variable 
+        value="200" 
+        doc:name="Set Success Status" 
+        doc:id="0c9e97e4-5398-4cf3-a305-cac1df1d74b9"
+        variableName="httpStatus"/>
+    
+    <error-handler>
+        <on-error-propagate 
+            enableNotifications="true" 
+            logException="true" 
+            doc:name="On Error Propagate" 
+            doc:id="c291e964-1939-43e5-81da-7dd83111e2ae">
+            <set-variable 
+                value='#[output application/java --- {
+                    message: "Cache invalidation failed", 
+                    error: error.description,
+                    timestamp: now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+                }]' 
+                doc:name="Set Error Message" 
+                doc:id="7f87ca8f-b6ad-4103-9423-095b479144fe"
+                variableName="responseMessage"/>
+            
+            <set-variable 
+                value="500" 
+                doc:name="Set Error Status" 
+                doc:id="241637a3-df3a-475c-9255-f33f9e2b7309"
+                variableName="httpStatus"/>
+            
+            <logger 
+                level="ERROR" 
+                doc:name="Invalidation Error" 
+                doc:id="b6dd0146-3468-49c5-9370-213ce50e6df7"
+                message='#["*** INVALIDATION ERROR *** " ++ error.description]'/>
+        </on-error-propagate>
+    </error-handler>
+</flow>
+
+
+
+<!-- Doc rule-->
+<flow name="mule-mcp-appgatewayDocRules" doc:id="doc-rules-gateway-flow-01">
+    <http:listener 
+        doc:name="Listener Doc Rules" 
+        doc:id="doc-rules-listener-01" 
+        config-ref="HTTP_Listener_config" 
+        path="${listener.docrules.path}">
+        <http:response statusCode="#[vars.httpStatus default 200]">
+            <http:headers>#[(vars.responseHeaders default {}) ++ (if (vars.cacheHit default false) {'X-Cache': 'Cached'} else {})]</http:headers>
+        </http:response>
+        <http:error-response statusCode="#[vars.httpStatus default 500]">
+            <http:headers>#[(vars.responseHeaders default {}) ++ (if (vars.cacheHit default false) {'X-Cache': 'Cached'} else {})]</http:headers>
+        </http:error-response>
+    </http:listener>
+
+    <logger 
+        level="INFO" 
+        doc:name="Entry-log Doc Rules" 
+        doc:id="doc-rules-entry-log-01" 
+        message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [DOC RULES ENDPOINT RequestID: " ++ correlationId ++ "] Gateway Started | Remote IP: " ++ attributes.remoteAddress ++ " | Category: " ++ (attributes.queryParams.category default "ALL") ++ " | Type: " ++ (attributes.queryParams.type default "ALL") ++ " ***********************************"]'/>
+
+    <set-variable 
+        value="#[attributes.headers.username default null]" 
+        doc:name="Extract Username from Header" 
+        doc:id="doc-rules-extract-user-01" 
+        variableName="authUsername"/>
+
+    <set-variable 
+        value="#[attributes.headers.password default null]" 
+        doc:name="Extract Password from Header" 
+        doc:id="doc-rules-extract-pass-01" 
+        variableName="authPassword"/>
+
+    <set-variable 
+        value='#[attributes.headers.authorization default attributes.headers.Authorization default null]' 
+        doc:name="Get Authorization Header" 
+        doc:id="doc-rules-get-auth-01" 
+        variableName="authorizationHeader"/>
+
+    <choice doc:name="Construct Auth Header if Needed" doc:id="doc-rules-auth-choice-01">
+        <when expression="#[vars.authorizationHeader == null and vars.authUsername != null and vars.authPassword != null]">
+            <ee:transform doc:name="Create Basic Auth Header" doc:id="doc-rules-basic-auth-01">
+                <ee:message/>
+                <ee:variables>
+                    <ee:set-variable variableName="authorizationHeader"><![CDATA[%dw 2.0
+import * from dw::core::Binaries
+output application/java
+var credentials = vars.authUsername ++ ":" ++ vars.authPassword
+var base64Encoded = toBase64(credentials)
+---
+"Basic " ++ base64Encoded]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        </when>
+    </choice>
+
+    <logger 
+        level="INFO" 
+        doc:name="Log Auth Method" 
+        doc:id="doc-rules-log-auth-01" 
+        message='#["Authentication header prepared | Auth present: " ++ (vars.authorizationHeader != null)]'/>
+
+    <set-variable 
+        value='#["docrules_" ++ (attributes.queryParams.category default "all") ++ "_" ++ (attributes.queryParams.type default "all")]' 
+        doc:name="Set Cache Key" 
+        doc:id="doc-rules-cache-key-01" 
+        variableName="cacheKey"/>
+
+    <set-variable 
+        value="#[false]" 
+        doc:name="Set Cache Hit Flag" 
+        doc:id="doc-rules-cache-hit-flag-01"
+        variableName="cacheHit"/>
+
+    <logger 
+        level="INFO" 
+        doc:name="Log Cache Lookup Start" 
+        doc:id="doc-rules-cache-lookup-01" 
+        message='#[">>> Checking doc rules cache for key: " ++ vars.cacheKey]'/>
+
+    <try doc:name="Try" doc:id="doc-rules-try-01">
+        <os:retrieve 
+            doc:name="Retrieve from Cache" 
+            doc:id="doc-rules-retrieve-01"
+            key="#[vars.cacheKey]" 
+            objectStore="Doc_Rules_Cache_Object_Store"
+            target="cachedResponse"/>
+
+        <set-variable 
+            value="#[true]" 
+            doc:name="Mark Cache Hit" 
+            doc:id="doc-rules-cache-hit-01"
+            variableName="cacheHit"/>
+
+        <logger 
+            level="INFO" 
+            doc:name="CACHE HIT" 
+            doc:id="doc-rules-cache-hit-log-01"
+            message='#["*** CACHE HIT *** Key: " ++ vars.cacheKey ++ " | Returning cached doc rules response"]'/>
+
+        <set-payload 
+            value="#[vars.cachedResponse.payload]" 
+            doc:name="Set Cached Payload" 
+            doc:id="doc-rules-set-cached-payload-01"
+            mimeType="application/json"/>
+
+        <set-variable 
+            value="#[vars.cachedResponse.headers]" 
+            doc:name="Set Cached Headers" 
+            doc:id="doc-rules-set-cached-headers-01"
+            variableName="responseHeaders"/>
+
+        <set-variable 
+            value="#[vars.cachedResponse.statusCode]" 
+            doc:name="Set Cached Status" 
+            doc:id="doc-rules-set-cached-status-01"
+            variableName="httpStatus"/>
+
+        <error-handler>
+            <on-error-continue 
+                enableNotifications="true" 
+                logException="false" 
+                doc:name="On Error Continue" 
+                doc:id="doc-rules-cache-miss-01"
+                type="OS:KEY_NOT_FOUND">
+
+                <logger 
+                    level="INFO" 
+                    doc:name="CACHE MISS" 
+                    doc:id="doc-rules-cache-miss-log-01"
+                    message='#["*** CACHE MISS *** Key: " ++ vars.cacheKey ++ " | Fetching doc rules from backend"]'/>
+
+                <http:request 
+                    method="GET" 
+                    doc:name="Request-DocRules from Backend" 
+                    doc:id="doc-rules-http-request-01" 
+                    path="/getdocrules" 
+                    sendBodyMode="ALWAYS" 
+                    responseTimeout="${http.timeout}" 
+                    config-ref="HTTP_Request_Rules">
+                    <http:headers><![CDATA[#[output application/java
+---
+{
+    "Authorization": vars.authorizationHeader
+}]]]></http:headers>
+                    <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
+                </http:request>
+
+                <ee:transform doc:name="Response Lite" doc:id="doc-rules-response-lite-01">
+                    <ee:message>
+                        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "status":             payload.status,
+    "processedAt":        payload.processedAt,
+    "totalRulesFetched":  payload.totalRulesFetched,
+    result: payload.result map {
+        "rule-id":       $."rule-id",
+        "rule-name":     $."rule-name",
+        "action":        $.action,
+        "severity":      $.severity,
+        "type":          $."type",
+        "category":      $.category,
+        "target-files":  $."target-files",
+        "business-rule": $."business-rule"
+    }
+}]]></ee:set-payload>
+                    </ee:message>
+                </ee:transform>
+
+                <logger 
+                    level="INFO" 
+                    doc:name="Backend Response Received" 
+                    doc:id="doc-rules-backend-log-01"
+                    message='#["Doc Rules Backend responded | Status: " ++ attributes.statusCode]'/>
+
+                <set-variable 
+                    value="#[attributes.headers]" 
+                    doc:name="Store Response Headers" 
+                    doc:id="doc-rules-store-headers-01" 
+                    variableName="responseHeaders"/>
+
+                <set-variable 
+                    value="#[attributes.statusCode]" 
+                    doc:name="Store Status Code" 
+                    doc:id="doc-rules-store-status-01" 
+                    variableName="httpStatus"/>
+
+                <set-variable 
+                    value="#[payload]" 
+                    doc:name="Store Payload" 
+                    doc:id="doc-rules-store-payload-01" 
+                    variableName="responsePayload"/>
+
+                <os:store 
+                    doc:name="Store in Cache" 
+                    doc:id="doc-rules-cache-store-01"
+                    key="#[vars.cacheKey]" 
+                    objectStore="Doc_Rules_Cache_Object_Store"
+                    failIfPresent="false"
+                    failOnNullValue="false">
+                    <os:value><![CDATA[#[output application/java --- {
+                        payload: write(vars.responsePayload, 'application/json'),
+                        headers: vars.responseHeaders,
+                        statusCode: vars.httpStatus,
+                        cachedAt: now() as String {format: "yyyy-MM-dd'T'HH:mm:ss.SSS"}
+                    }]]]></os:value>
+                </os:store>
+
+                <logger 
+                    level="INFO" 
+                    doc:name="Response Cached Successfully" 
+                    doc:id="doc-rules-cached-log-01"
+                    message='#["*** CACHED *** Key: " ++ vars.cacheKey ++ " | TTL: " ++ p("cache.ttl.seconds") ++ " seconds"]'/>
+
+                <set-payload 
+                    value="#[vars.responsePayload]" 
+                    doc:name="Restore Payload" 
+                    doc:id="doc-rules-restore-payload-01"
+                    mimeType="application/json"/>
+            </on-error-continue>
+
+            <on-error-continue 
+                enableNotifications="true" 
+                logException="true" 
+                doc:name="On Any Other Error" 
+                doc:id="doc-rules-any-error-01"
+                type="ANY">
+
+                <logger 
+                    level="ERROR" 
+                    doc:name="Cache Error - Fallback to Backend" 
+                    doc:id="doc-rules-fallback-log-01"
+                    message='#["*** CACHE ERROR *** " ++ error.description ++ " | Falling back to doc rules backend"]'/>
+
+                <http:request 
+                    method="GET" 
+                    doc:name="Request-DocRules Fallback" 
+                    doc:id="doc-rules-fallback-request-01" 
+                    path="/getdocrules" 
+                    sendBodyMode="ALWAYS" 
+                    responseTimeout="${http.timeout}" 
+                    config-ref="HTTP_Request_Rules">
+                    <http:headers><![CDATA[#[output application/java
+---
+{
+    "Authorization": vars.authorizationHeader
+}]]]></http:headers>
+                    <http:query-params><![CDATA[#[attributes.queryParams]]]></http:query-params>
+                </http:request>
+
+                <set-variable 
+                    value="#[attributes.headers]" 
+                    doc:name="Store Response Headers" 
+                    doc:id="doc-rules-fallback-headers-01" 
+                    variableName="responseHeaders"/>
+
+                <set-variable 
+                    value="#[attributes.statusCode]" 
+                    doc:name="Store Status Code" 
+                    doc:id="doc-rules-fallback-status-01" 
+                    variableName="httpStatus"/>
+            </on-error-continue>
+        </error-handler>
+    </try>
+
+    <logger 
+        level="INFO" 
+        doc:name="Final Response Log" 
+        doc:id="doc-rules-final-log-01"
+        message='#["[" ++ now() as String {format: "yyyy-MM-dd HH:mm:ss.SSS"} ++ "] [DOC RULES ENDPOINT RequestID: " ++ correlationId ++ "] Completed | Cache Hit: " ++ vars.cacheHit ++ " | Status: " ++ vars.httpStatus ++ " ***********************************"]'/>
+
+    <error-handler ref="ai-api-proxy-error-handler" doc:name="Reference Global Error Handler" doc:id="doc-rules-global-error-01"/>
+</flow>
+
+
+
+</mule>
