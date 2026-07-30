@@ -1,0 +1,570 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mcp="http://www.mulesoft.org/schema/mule/mcp" xmlns:ms-agentforce="http://www.mulesoft.org/schema/mule/ms-agentforce" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd  http://www.mulesoft.org/schema/mule/ms-agentforce http://www.mulesoft.org/schema/mule/ms-agentforce/current/mule-ms-agentforce.xsd  http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd  http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd  http://www.mulesoft.org/schema/mule/mcp http://www.mulesoft.org/schema/mule/mcp/current/mule-mcp.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd">
+    
+    	<!-- <configuration-properties doc:name="Configuration properties" doc:id="8bcfdaf2-8088-4d58-80f8-3461522caea1" file="mule-app.properties" />-->
+	<!--
+	<http:listener-config name="Listener-config">
+        <http:listener-connection host="0.0.0.0" port="8081"></http:listener-connection>
+    </http:listener-config>
+    -->
+	
+<http:listener-config name="Listener-config">
+    <http:listener-connection host="0.0.0.0" port="8081" 
+                               connectionIdleTimeout="300000"
+                               usePersistentConnections="true">
+    </http:listener-connection>
+</http:listener-config>
+
+<mcp:server-config name="mcp-Server" serverName="user-lookup-server" serverVersion="1.0.0">
+    <mcp:sse-server-connection 
+        listenerConfig="Listener-config"
+        sseEndpointPath="/sse"
+        messagesPath="/message"
+        requestTimeout="300"
+        requestTimeoutUnit="SECONDS">
+        <mcp:default-sse-response-headers>
+            <mcp:default-sse-response-header key="Content-Type" value="text/event-stream; charset=utf-8"/>
+            <mcp:default-sse-response-header key="Cache-Control" value="no-cache, no-transform"/>
+            <mcp:default-sse-response-header key="X-Accel-Buffering" value="no"/>
+            <mcp:default-sse-response-header key="Connection" value="keep-alive"/>
+        </mcp:default-sse-response-headers>
+        <mcp:default-message-response-headers>
+            <mcp:default-message-response-header key="Content-Type" value="application/json"/>
+            <mcp:default-message-response-header key="X-Server-Version" value="1.0.0"/>
+        </mcp:default-message-response-headers>
+    </mcp:sse-server-connection>
+</mcp:server-config>
+
+	
+	<!-- This is for MCP tools node js app with http stream -->	
+	<mcp:server-config name="mcp-Server-stream" serverName="user-lookup-server" serverVersion="1.0.0">
+       <mcp:streamable-http-server-connection listenerConfig="Listener-config">
+       <mcp:default-response-headers>
+				<mcp:default-response-header key="Content-Type" value="application/json"/>
+				<mcp:default-response-header key="X-Server-Version" value="1.0.0"/>
+			</mcp:default-response-headers>
+		</mcp:streamable-http-server-connection>
+    </mcp:server-config>
+	
+    
+
+   
+   
+  
+   <!-- NEW: Separate Rules Data Source Sub-flow (easily replaceable with file/DB) -->
+    <http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="a4a0d038-bbc1-4194-9a80-43fc4243015f" >
+		<http:request-connection host="user-lookup-db-czif7s.ga8jrk.usa-e1.cloudhub.io" port="443" protocol="HTTPS"/>
+	</http:request-config>
+ 
+   
+
+	<flow name="mcp-server">
+       <mcp:tool-listener config-ref="mcp-Server" name="user-lookup">
+            <mcp:description><![CDATA[Look up user information by name from JSON data]]></mcp:description>
+            <mcp:parameters-schema><![CDATA[{
+				"$schema": "http://json-schema.org/draft-07/schema#", 
+				"type": "object", 
+				"properties": {
+					"userName": {"type": "string","description": "Name of the user to look up"}
+				}, 
+				"required": ["userName"]
+			}]]></mcp:parameters-schema>
+            <mcp:responses>
+                <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"></mcp:text-tool-response-content>
+            </mcp:responses>
+            <mcp:on-error-responses>
+                <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"></mcp:text-tool-response-content>
+            </mcp:on-error-responses>
+        </mcp:tool-listener>
+        <logger doc:id="0001c3af-1b03-4622-b7b3-ffcf74ccfd4a" doc:name="Logger" message="#[payload]"/>
+        <logger doc:id="7db44cb8-ee47-4de4-a075-693d1d777020" doc:name="Log MCP Tool Call" level="INFO" message="MCP Tool 'user-lookup' called with: #[payload]"></logger>
+        <!-- Extract user name from tool arguments -->
+        <set-variable doc:id="6ccc0f78-782e-4a63-a3c7-bc0fa0d306e9" doc:name="Extract User Name" value="#[payload.userName default 'unknown']" variableName="toolUserName"></set-variable>
+        <ee:transform doc:name="Set Json" doc:id="66fb8993-0d1d-4f3d-8cad-08d358a6c594" >
+            <ee:message >
+                <ee:set-payload doc:name="Set payload" doc:id="e9e4855f-bad3-403f-8181-44fc65544b4d" ><![CDATA[%dw 2.0
+        output application/json
+        ---
+        [{
+"name":"anirban",
+"age" : "35",
+"address" : "123 road, Hyd"
+},
+{
+"name":"Sujay",
+"age" : "36",
+"address" : "456 road, Hyd"
+},
+{
+"name":"Ankur",
+"age" : "34",
+"address" : "789 road, Hyd"
+}
+]]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <!-- Read JSON file for MCP tool -->
+        <!-- Filter user data for MCP tool -->
+        <ee:transform doc:id="0a506dd5-ec0d-41e0-858a-5dba6748f1c0" doc:name="Process MCP Tool Request">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	
+	"status": "success",
+	"processedAt": now(),
+	
+	"result": (payload filter ($.name == vars.toolUserName))[0] default {
+		"error": "User not found via MCP tool"
+	}
+}
+]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <set-variable value="application/json" doc:name="Set Content Type" variableName="contentType"/>
+        <logger doc:id="4dd1a85c-13d1-4a4b-baeb-ba9ce120862e" doc:name="Log MCP Tool Response" level="INFO" message="MCP Tool Response: #[payload]"></logger>
+    </flow>
+
+
+
+
+
+
+
+<!-- rule -->
+
+
+ 
+
+
+
+
+    <!-- ENHANCED: Rules Flow with separate data source and improved filtering -->
+    <flow name="mcp-server-rules">
+        <mcp:tool-listener config-ref="mcp-Server" name="rule-lookup">
+            <mcp:description><![CDATA[Look up rule information by name from JSON data]]></mcp:description>
+            <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Filter rules by category"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+            <mcp:responses>
+                <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"></mcp:text-tool-response-content>
+            </mcp:responses>
+            <mcp:on-error-responses>
+                <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"></mcp:text-tool-response-content>
+            </mcp:on-error-responses>
+        </mcp:tool-listener>
+       
+       <flow-ref doc:name="mcp-process-rules" doc:id="8a2d6372-780e-4279-ba1d-ac04f7ccee3c" name="mcp-process-rules"/>
+		<logger level="INFO" doc:name="Logger" doc:id="77b2765c-7301-4d89-bd5b-5233af43310b" message="---------Called from MCP SSE flow------------"/>
+       
+    </flow>
+
+
+  <!-- ENHANCED: Rules Flow with separate data source and improved filtering -->
+    <flow name="mcp-server-rules-stream">
+        <mcp:tool-listener config-ref="mcp-Server-stream" name="rule-lookup">
+            <mcp:description><![CDATA[Look up rule information by name from JSON data]]></mcp:description>
+            <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Filter rules by category"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+            <mcp:responses>
+                <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"></mcp:text-tool-response-content>
+            </mcp:responses>
+            <mcp:on-error-responses>
+                <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"></mcp:text-tool-response-content>
+            </mcp:on-error-responses>
+        </mcp:tool-listener>
+		<flow-ref doc:name="mcp-process-rules" doc:id="c6dd1489-4720-4fcf-9e4e-2f5c0e44b223" name="mcp-process-rules"/>
+		<logger level="INFO" doc:name="Logger" doc:id="baff9f89-b169-4a6c-b1ff-635b9a3f8b33" message="---------Called from MCP HTTP stream flow------------"/>
+       
+          
+</flow>
+ 
+
+
+<flow name="mcp-process-rules" doc:id="36f0594a-9c37-4149-a1be-467e3d4e1a15">
+     <logger doc:id="3fc90d60-d292-49a5-a69f-9a43ba6513f2" doc:name="Log MCP Tool Call" level="INFO" message="MCP Tool 'rule-lookup' called with: #[payload]"></logger>
+        
+        <!-- Extract category from tool arguments -->
+        <set-variable doc:id="9c01170e-b05b-496d-a179-92de589f067a" doc:name="Extract Category" value="#[payload.category default null]" variableName="categoryFilter"></set-variable>
+        
+        <!-- ENHANCED: Improved category filtering for comma-separated values -->
+        <http:request method="GET" doc:name="Request" doc:id="e8639108-21a7-4cd9-9fc7-e491362de84f" config-ref="HTTP_Request_configuration" path="/${rules.db.ruleId}/${rules.db.ruleVersion}/${rules.db.env}/get-all-rules"/>
+        
+		<ee:transform doc:name="transformHTTPresponse" doc:id="c5b56547-e7fb-41b3-adb9-90bdb9ba0a63" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+        <!-- ENHANCED: Improved category filtering for comma-separated values -->
+        <ee:transform doc:name="Filter Rules by Category" doc:id="a55a46cb-e091-4558-af26-a694677b8481">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload filter (
+    if (vars.categoryFilter != null and vars.categoryFilter != "")
+        do {
+            var requestCats = (vars.categoryFilter splitBy ",") map trim($)
+            var ruleCats = ($.category splitBy ",") map trim($)
+            ---
+            sizeOf(requestCats -- (requestCats -- ruleCats)) > 0
+        }
+    else
+        true
+)]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        
+        <!-- Process MCP tool request and handle empty results (PRESERVED EXISTING LOGIC) -->
+        <ee:transform doc:id="79d0f20e-22d3-4eae-91f4-e2602acea6d8" doc:name="Process MCP Tool Request">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+if (sizeOf(payload) > 0) {
+	"status": "success",
+	"processedAt": now(),
+	"result": payload
+} else {
+	"status": "error", 
+	"processedAt": now(),
+	"error": "rule not found via MCP tool"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <set-variable value="application/json" doc:name="Set Content Type" variableName="contentType"/>
+        <logger doc:id="65ad7c71-a6f6-4a78-84a8-20fc07ba6081" doc:name="Log MCP Tool Response" level="INFO" message="MCP Tool Response: #[payload]"></logger>
+   
+</flow>
+
+
+
+
+<!-- ========================================== -->
+<!-- DOCUMENT STANDARDS MCP SERVER FLOWS     -->
+<!-- Add these flows to mcp-test-client.xml    -->
+<!-- Place at the END of the file before </mule> -->
+<!-- ========================================== -->
+
+
+
+<flow name="mcp-server-doc-rules">
+    <mcp:tool-listener config-ref="mcp-Server" name="doc-rule-lookup">
+        <mcp:description><![CDATA[Look up document review rules (HLD, LLD, SDD) by category]]></mcp:description>
+        <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Filter rules by category"
+    },
+    "type": {
+      "type": "string",
+      "description": "Filter by document type (hld, lld, sdd)"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+        <mcp:responses>
+            <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"/>
+        </mcp:responses>
+        <mcp:on-error-responses>
+            <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"/>
+        </mcp:on-error-responses>
+    </mcp:tool-listener>
+    <flow-ref name="mcp-process-doc-rules"/>
+    <logger level="INFO" message="---------Called from MCP SSE flow (Doc Rules)------------"/>
+</flow>
+
+
+<flow name="mcp-server-doc-rules-stream">
+    <mcp:tool-listener config-ref="mcp-Server-stream" name="doc-rule-lookup">
+        <mcp:description><![CDATA[Look up document review rules (HLD, LLD, SDD) by category]]></mcp:description>
+        <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Filter rules by category"
+    },
+    "type": {
+      "type": "string",
+      "description": "Filter by document type (hld, lld, sdd)"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+        <mcp:responses>
+            <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"/>
+        </mcp:responses>
+        <mcp:on-error-responses>
+            <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"/>
+        </mcp:on-error-responses>
+    </mcp:tool-listener>
+    <flow-ref name="mcp-process-doc-rules"/>
+    <logger level="INFO" message="---------Called from MCP HTTP stream flow (Doc Rules)------------"/>
+</flow>
+
+
+
+
+<flow name="mcp-process-doc-rules">
+    <logger level="INFO" message="MCP Tool 'doc-rule-lookup' called with: #[payload]"/>
+
+    <set-variable value="#[payload.category default null]" variableName="docCategoryFilter"/>
+    <set-variable value="#[payload.type default null]"     variableName="docTypeFilter"/>
+
+    <http:request method="GET"
+                  config-ref="HTTP_Request_configuration"
+                  path="/${rules.db.ruleId}/${rules.db.ruleVersion}/${rules.db.env}/doc-get-all-rules"/>
+
+    <ee:transform doc:name="Filter Doc Rules">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload filter (
+    (
+        if (vars.docCategoryFilter != null and vars.docCategoryFilter != "")
+            do {
+                var reqCats  = (vars.docCategoryFilter splitBy ",") map trim($)
+                var ruleCats = ($.category splitBy ",") map trim($)
+                ---
+                sizeOf(reqCats -- (reqCats -- ruleCats)) > 0
+            }
+        else true
+    )
+    and
+    (
+        if (vars.docTypeFilter != null and vars.docTypeFilter != "")
+            do {
+                var reqTypes  = (vars.docTypeFilter splitBy ",") map trim($)
+                var ruleTypes = ($."type" splitBy ",") map trim($)
+                ---
+                sizeOf(reqTypes -- (reqTypes -- ruleTypes)) > 0
+            }
+        else true
+    )
+)]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+    <ee:transform doc:name="Process MCP Doc Rules Response">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+if (sizeOf(payload) > 0) {
+    "status":      "success",
+    "processedAt": now(),
+    "result":      payload
+} else {
+    "status":      "error",
+    "processedAt": now(),
+    "error":       "No document rules found via MCP tool"
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+
+    <set-variable value="application/json" variableName="contentType"/>
+    <logger level="INFO" message="MCP Doc Rules Response: #[payload]"/>
+</flow>
+
+
+
+
+
+
+<!-- ========================================== -->
+<!-- ESTIMATION STANDARDS MCP SERVER FLOWS     -->
+<!-- Add these flows to mcp-test-client.xml    -->
+<!-- Place at the END of the file before </mule> -->
+<!-- ========================================== -->
+
+<!-- OPTION 1: For SSE Server Connection -->
+<flow name="mcp-server-estimation-standards" doc:id="9d7d12d6-59d6-4559-a457-fa795bdae664">
+    <mcp:tool-listener config-ref="mcp-Server" name="estimation-standards-lookup">
+        <mcp:description><![CDATA[Retrieve API estimation standards from database including complexity levels, effort days, and resource breakdowns]]></mcp:description>
+        <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "complexity": {
+      "type": "string",
+      "description": "Filter by complexity level (Very Simple, Simple, Medium, Complex, Very Complex)",
+      "enum": ["Very Simple", "Simple", "Medium", "Complex", "Very Complex"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Filter by API category (e.g., 'Consumer Facing API', 'Process API')"
+    },
+    "minEffortDays": {
+      "type": "number",
+      "description": "Minimum end-to-end effort days"
+    },
+    "maxEffortDays": {
+      "type": "number",
+      "description": "Maximum end-to-end effort days"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+        <mcp:responses>
+            <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"></mcp:text-tool-response-content>
+        </mcp:responses>
+        <mcp:on-error-responses>
+            <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"></mcp:text-tool-response-content>
+        </mcp:on-error-responses>
+    </mcp:tool-listener>
+    
+    <flow-ref doc:name="Call Common Processing" name="mcp-process-estimation-standards"/>
+    <logger level="INFO" doc:name="Logger" message="Called from MCP SSE flow (Estimation Standards)"/>
+</flow>
+
+
+<!-- OPTION 2: For HTTP Streamable Server Connection -->
+<flow name="mcp-server-estimation-standards-stream" doc:id="10f0576b-91fa-42eb-8c7e-eb41d6408ac8">
+    <mcp:tool-listener config-ref="mcp-Server-stream" name="estimation-standards-lookup">
+        <mcp:description><![CDATA[Retrieve API estimation standards from database including complexity levels, effort days, and resource breakdowns]]></mcp:description>
+        <mcp:parameters-schema><![CDATA[
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "complexity": {
+      "type": "string",
+      "description": "Filter by complexity level (Very Simple, Simple, Medium, Complex, Very Complex)",
+      "enum": ["Very Simple", "Simple", "Medium", "Complex", "Very Complex"]
+    },
+    "category": {
+      "type": "string",
+      "description": "Filter by API category (e.g., 'Consumer Facing API', 'Process API')"
+    },
+    "minEffortDays": {
+      "type": "number",
+      "description": "Minimum end-to-end effort days"
+    },
+    "maxEffortDays": {
+      "type": "number",
+      "description": "Maximum end-to-end effort days"
+    }
+  },
+  "additionalProperties": false
+}
+]]></mcp:parameters-schema>
+        <mcp:responses>
+            <mcp:text-tool-response-content text="#[write(payload, 'application/json')]"></mcp:text-tool-response-content>
+        </mcp:responses>
+        <mcp:on-error-responses>
+            <mcp:text-tool-response-content text="#['Error occurred: ' ++ error.description]"></mcp:text-tool-response-content>
+        </mcp:on-error-responses>
+    </mcp:tool-listener>
+    
+    <flow-ref doc:name="Call Common Processing" name="mcp-process-estimation-standards"/>
+    <logger level="INFO" doc:name="Logger" message="Called from MCP HTTP stream flow (Estimation Standards)"/>
+</flow>
+
+
+
+<!-- Common Processing Sub-flow - DOES NOT IMPACT EXISTING FLOWS -->
+<sub-flow name="mcp-process-estimation-standards" doc:id="ac121d2a-dc81-481f-8413-4cd8d5fc97ee">
+    <logger doc:name="Log MCP Tool Call" 
+            level="INFO" 
+            message="MCP Tool 'estimation-standards-lookup' called with: #[payload]"/>
+    
+    <!-- Extract filter parameters from tool arguments -->
+    <set-variable doc:name="Extract Complexity Filter" 
+                  value="#[payload.complexity default null]" 
+                  variableName="estComplexityFilter"/>
+    <set-variable doc:name="Extract Category Filter" 
+                  value="#[payload.category default null]" 
+                  variableName="estCategoryFilter"/>
+    <set-variable doc:name="Extract Min Effort" 
+                  value="#[payload.minEffortDays default null]" 
+                  variableName="estMinEffort"/>
+    <set-variable doc:name="Extract Max Effort" 
+                  value="#[payload.maxEffortDays default null]" 
+                  variableName="estMaxEffort"/>
+    
+   <!-- HTTP Request to Estimation DB API -->
+    
+      <http:request method="GET" doc:name="Request" doc:id="7f2934f9-cd89-4965-9cb0-71280902b0ae" config-ref="HTTP_Request_configuration" path="/estimation/get-standards"/>
+      
+    
+    <!-- Parse and filter the response -->
+    <ee:transform doc:name="Filter Estimation Standards">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+do {
+    var allStandards = payload.standards
+    var filtered = allStandards filter (
+        (vars.estComplexityFilter == null or $.complexity == vars.estComplexityFilter) and
+        (vars.estCategoryFilter == null or (($.category default "") contains vars.estCategoryFilter)) and
+        (vars.estMinEffort == null or $.endToEndEffortDays >= vars.estMinEffort) and
+        (vars.estMaxEffort == null or $.endToEndEffortDays <= vars.estMaxEffort)
+    )
+    ---
+    {
+        status: if (sizeOf(filtered) > 0) "success" else "no_results",
+        processedAt: now(),
+        totalStandards: sizeOf(filtered),
+        filters: {
+            complexity: vars.estComplexityFilter,
+            category: vars.estCategoryFilter,
+            minEffortDays: vars.estMinEffort,
+            maxEffortDays: vars.estMaxEffort
+        },
+        standards: filtered
+    }
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+    
+    <set-variable value="application/json" doc:name="Set Content Type" variableName="contentType"/>
+    <logger doc:name="Log MCP Tool Response" 
+            level="INFO" 
+            message="MCP Tool Response: Returned #[payload.totalStandards] estimation standards"/>
+</sub-flow>
+
+
+
+
+
+</mule>
