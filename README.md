@@ -53,6 +53,34 @@ mvn clean install
 
 ### 💡 *Building the Future of API Integration*
 
+
+
+
+
+
+
+GET /getdocrules
+
+With category filter
+
+GET /getdocrules?category=Architecture
+GET /getdocrules?category=Architecture, Design Quality
+
+With docType filter
+
+GET /getdocrules?docType=hld
+GET /getdocrules?docType=hld,sdd
+GET /getdocrules?docType=lld
+
+With both filters
+
+GET /getdocrules?category=Architecture&docType=hld
+GET /getdocrules?category=Architecture, Design Quality&docType=hld,sdd
+
+All prefixed with your CloudHub base URL:
+
+https://user-lookup-server-czif7s.ga8jrk.usa-e1.cloudhub.io/getdocrules
+
 **Created:** 05-04-2026 | **Author:** [@anirban37](https://github.com/anirban37) | **Type:** RESTful API
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-api-documentation) • [Deployment](#-deployment) • [Contributing](#-contributing)
