@@ -136,11 +136,6 @@ output application/json
 <!-- rule -->
 
 
- 
-
-
-
-
     <!-- ENHANCED: Rules Flow with separate data source and improved filtering -->
     <flow name="mcp-server-rules">
         <mcp:tool-listener config-ref="mcp-Server" name="rule-lookup">
@@ -267,14 +262,14 @@ if (sizeOf(payload) > 0) {
 
 
 
+
 <!-- ========================================== -->
 <!-- DOCUMENT STANDARDS MCP SERVER FLOWS     -->
 <!-- Add these flows to mcp-test-client.xml    -->
 <!-- Place at the END of the file before </mule> -->
 <!-- ========================================== -->
 
-
-
+<!-- SSE flow for doc-rule-lookup -->
 <flow name="mcp-server-doc-rules">
     <mcp:tool-listener config-ref="mcp-Server" name="doc-rule-lookup">
         <mcp:description><![CDATA[Look up document review rules (HLD, LLD, SDD) by category]]></mcp:description>
@@ -286,10 +281,6 @@ if (sizeOf(payload) > 0) {
     "category": {
       "type": "string",
       "description": "Filter rules by category"
-    },
-    "type": {
-      "type": "string",
-      "description": "Filter by document type (hld, lld, sdd)"
     }
   },
   "additionalProperties": false
@@ -306,7 +297,7 @@ if (sizeOf(payload) > 0) {
     <logger level="INFO" message="---------Called from MCP SSE flow (Doc Rules)------------"/>
 </flow>
 
-
+<!-- Stream flow for doc-rule-lookup -->
 <flow name="mcp-server-doc-rules-stream">
     <mcp:tool-listener config-ref="mcp-Server-stream" name="doc-rule-lookup">
         <mcp:description><![CDATA[Look up document review rules (HLD, LLD, SDD) by category]]></mcp:description>
@@ -318,10 +309,6 @@ if (sizeOf(payload) > 0) {
     "category": {
       "type": "string",
       "description": "Filter rules by category"
-    },
-    "type": {
-      "type": "string",
-      "description": "Filter by document type (hld, lld, sdd)"
     }
   },
   "additionalProperties": false
@@ -338,46 +325,31 @@ if (sizeOf(payload) > 0) {
     <logger level="INFO" message="---------Called from MCP HTTP stream flow (Doc Rules)------------"/>
 </flow>
 
-
-
-
+<!-- Common processing flow - mirrors mcp-process-rules exactly, just different API path -->
 <flow name="mcp-process-doc-rules">
     <logger level="INFO" message="MCP Tool 'doc-rule-lookup' called with: #[payload]"/>
 
     <set-variable value="#[payload.category default null]" variableName="docCategoryFilter"/>
-    <set-variable value="#[payload.type default null]"     variableName="docTypeFilter"/>
 
     <http:request method="GET"
                   config-ref="HTTP_Request_configuration"
                   path="/${rules.db.ruleId}/${rules.db.ruleVersion}/${rules.db.env}/doc-get-all-rules"/>
 
-    <ee:transform doc:name="Filter Doc Rules">
+    <ee:transform doc:name="Filter Doc Rules by Category">
         <ee:message>
             <ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 payload filter (
-    (
-        if (vars.docCategoryFilter != null and vars.docCategoryFilter != "")
-            do {
-                var reqCats  = (vars.docCategoryFilter splitBy ",") map trim($)
-                var ruleCats = ($.category splitBy ",") map trim($)
-                ---
-                sizeOf(reqCats -- (reqCats -- ruleCats)) > 0
-            }
-        else true
-    )
-    and
-    (
-        if (vars.docTypeFilter != null and vars.docTypeFilter != "")
-            do {
-                var reqTypes  = (vars.docTypeFilter splitBy ",") map trim($)
-                var ruleTypes = ($."type" splitBy ",") map trim($)
-                ---
-                sizeOf(reqTypes -- (reqTypes -- ruleTypes)) > 0
-            }
-        else true
-    )
+    if (vars.docCategoryFilter != null and vars.docCategoryFilter != "")
+        do {
+            var requestCats = (vars.docCategoryFilter splitBy ",") map trim($)
+            var ruleCats = ($.category splitBy ",") map trim($)
+            ---
+            sizeOf(requestCats -- (requestCats -- ruleCats)) > 0
+        }
+    else
+        true
 )]]></ee:set-payload>
         </ee:message>
     </ee:transform>
@@ -402,7 +374,6 @@ if (sizeOf(payload) > 0) {
     <set-variable value="application/json" variableName="contentType"/>
     <logger level="INFO" message="MCP Doc Rules Response: #[payload]"/>
 </flow>
-
 
 
 
@@ -498,7 +469,6 @@ if (sizeOf(payload) > 0) {
     <flow-ref doc:name="Call Common Processing" name="mcp-process-estimation-standards"/>
     <logger level="INFO" doc:name="Logger" message="Called from MCP HTTP stream flow (Estimation Standards)"/>
 </flow>
-
 
 
 <!-- Common Processing Sub-flow - DOES NOT IMPACT EXISTING FLOWS -->
