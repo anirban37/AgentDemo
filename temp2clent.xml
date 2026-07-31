@@ -286,54 +286,50 @@ read(payload.contents[0].text, "application/json")]]></ee:set-payload>
 
 
 
-
-
-<flow name="get-doc-rules-flow">
-    <http:listener config-ref="Listener-config" path="/getdocrules" doc:name="Get Doc Rules HTTP Endpoint"/>
-
-    <logger doc:name="Log HTTP Request" level="INFO" message="HTTP /getdocrules called with query params: #[attributes.queryParams]"/>
-
-    <ee:transform doc:name="Prepare MCP Arguments">
-        <ee:message>
-            <ee:set-payload><![CDATA[%dw 2.0
+    <!-- ==================== -->
+    <!-- DOC RULES FLOW       -->
+    <!-- ==================== -->
+    <flow name="get-doc-rules-flow">
+        <http:listener config-ref="Listener-config" path="/getdocrules" doc:name="Get Doc Rules HTTP Endpoint"/>
+        <logger doc:name="Log HTTP Request" level="INFO" message="HTTP /getdocrules called with query params: #[attributes.queryParams]"/>
+        <ee:transform doc:name="Prepare MCP Arguments">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
 output application/java
 ---
 {
     (category: attributes.queryParams.category) if (attributes.queryParams.category != null and attributes.queryParams.category != ""),
-    (type: attributes.queryParams.type)         if (attributes.queryParams.type != null and attributes.queryParams.type != "")
+    (docType: attributes.queryParams.docType)   if (attributes.queryParams.docType != null and attributes.queryParams.docType != "")
 }]]></ee:set-payload>
-        </ee:message>
-    </ee:transform>
-
-    <mcp:call-tool config-ref="MCPClient" toolName="doc-rule-lookup" doc:name="Call MCP Doc Rule Lookup Tool">
-        <mcp:arguments>#[payload]</mcp:arguments>
-    </mcp:call-tool>
-
-    <ee:transform doc:name="Format HTTP Response">
-        <ee:message>
-            <ee:set-payload><![CDATA[%dw 2.0
+            </ee:message>
+        </ee:transform>
+        <mcp:call-tool config-ref="MCPClient" toolName="doc-rule-lookup" doc:name="Call MCP Doc Rule Lookup Tool">
+            <mcp:arguments>#[payload]</mcp:arguments>
+        </mcp:call-tool>
+        <ee:transform doc:name="Format HTTP Response">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 do {
     var mcpResponse = read(payload.contents[0].text, "application/json")
     ---
     if (mcpResponse.status == "success") {
-        "status":             "success",
-        "processedAt":        now(),
-        "totalRulesFetched":  sizeOf(mcpResponse.result),
-        "result":             mcpResponse.result
+        "status":            "success",
+        "processedAt":       now(),
+        "totalRulesFetched": sizeOf(mcpResponse.result),
+        "result":            mcpResponse.result
     } else {
-        "status":             "error",
-        "processedAt":        now(),
-        "totalRulesFetched":  0,
-        "error":              "No document rules found via HTTP endpoint",
-        "result":             []
+        "status":            "error",
+        "processedAt":       now(),
+        "totalRulesFetched": 0,
+        "error":             "No document rules found via HTTP endpoint",
+        "result":            []
     }
 }]]></ee:set-payload>
-        </ee:message>
-    </ee:transform>
-
-    <logger doc:name="Log HTTP Response" level="INFO" message="Doc Rules HTTP Response returned"/>
-</flow>
+            </ee:message>
+        </ee:transform>
+        <logger doc:name="Log HTTP Response" level="INFO" message="Doc Rules HTTP Response returned"/>
+    </flow>
 
 </mule>
